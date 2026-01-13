@@ -1,0 +1,2 @@
+PORT|int|The port on which nginx broadcasts the infrastructure and web services.
+HOST|str|The host at which nginx broadcasts the infrastructure and web services.

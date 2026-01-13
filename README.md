@@ -1,0 +1,1 @@
+Any file that ends in `template.conf` is a configuration file that must be compiled by replacing ${VAR_NAME} instances within the file with the value of the environment variable.
