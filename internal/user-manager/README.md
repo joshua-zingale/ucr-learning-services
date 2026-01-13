@@ -4,7 +4,7 @@ A group management web server that is intended to serve as middleware.
 
 ## Behavior
 
-The group manager should receive a web request with an X-Email header containing a unique email for the user.
+The user manager should receive a web request with an X-Email header containing a unique email for the user.
 The manager will then determine to which groups the email belongs,
 responding with a copy of the request,
 only with an X-Groups header added that contains a comma separated list of permissions like
@@ -50,17 +50,17 @@ All methods for updating the group assignments must function while keeping the g
 
 #### Command Line Interface
 
-The group manager should have a terminal interface that supports
+The user manager should have a terminal interface that supports
 
 ```bash
-group-manager create -p cs100.instructor # create the parent groups
-group-manager create cs100.students # fail if the parent(s) are not already created
-group-manager destroy cs100.students # delete the students group in cs100 if it is empty
-group-manager destroy -r cs100 # require -r for recursive deletes
-group-manager assign cs100.instructor bob@ucr.edu rob@ucr.edu # Add one or more emails to a group
-group-manager unassign cs100.instructor bob@ucr.edu rob@ucr.edu # remove one or more emails from a group
-group-manager get-groups bob@ucr.edu rob@ucr.edu # get the intersection of the goups held by all specified emails
-group-manager list cs100 # get all subgroups, e.g. "instructor, TA, student"
+user-manager create -p cs100.instructor # create the parent groups
+user-manager create cs100.students # fail if the parent(s) are not already created
+user-manager destroy cs100.students # delete the students group in cs100 if it is empty
+user-manager destroy -r cs100 # require -r for recursive deletes
+user-manager assign cs100.instructor bob@ucr.edu rob@ucr.edu # Add one or more emails to a group
+user-manager unassign cs100.instructor bob@ucr.edu rob@ucr.edu # remove one or more emails from a group
+user-manager get-groups bob@ucr.edu rob@ucr.edu # get the intersection of the goups held by all specified emails
+user-manager list cs100 # get all subgroups, e.g. "instructor, TA, student"
 ```
 
 #### YAML File
