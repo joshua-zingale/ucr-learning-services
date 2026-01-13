@@ -12,7 +12,7 @@ build-backend = "hatchling.build"
 
 
 [tool.hatch.build.targets.wheel]
-include=["main.py"]
+packages=["environment_setup"]
 
 [project.scripts]
-environment-setup="main:main"
+environment-setup="environment_setup.main:main"

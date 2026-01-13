@@ -84,7 +84,7 @@ def get_type(name: str) -> t.Type[int] | t.Type[str]:
         
 def get_environment_variable_declarations_from_file(file: Path) -> list[EnvironmentVariableDeclaration]:
     var_declarations: list[EnvironmentVariableDeclaration] = []
-    for i, line in enumerate(file.read_text().splitlines()):
+    for i, line in filter(lambda x: x[1].strip(), enumerate(file.read_text().splitlines())):
         try:
             var_declaration = EnvironmentVariableDeclaration.from_line(line)
         except UsageError as e:
