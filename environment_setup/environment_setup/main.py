@@ -11,8 +11,9 @@ import sys
 import typing as t
 
 from .environment import raise_if_bad_environment_variable_declarations
+from . import parsing
 from .usage_error import UsageError, UsageErrorList
-from .variable_declaration import EnvironmentVariableDeclaration, get_environment_variable_declarations_from_files
+from .variable_declaration import EnvironmentVariableDeclaration
 
 def main():
     try:
@@ -45,7 +46,7 @@ def cli():
 
 
     try:
-        var_declarations = get_environment_variable_declarations_from_files(environment_files)
+        var_declarations = parsing.parse_from_files(EnvironmentVariableDeclaration.from_line, environment_files)
     except UsageError as e:
         raise UsageError("parsing environment variable declarations", e.problem)
     

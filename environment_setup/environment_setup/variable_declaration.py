@@ -4,14 +4,8 @@ from pathlib import Path
 
 import typing as t
 
-from .usage_error import UsageError, UsageErrorList
+from .usage_error import UsageError
 
-
-@dataclass
-class DataInFile[T]:
-    file: Path
-    line: int
-    data: T
 
 
 class AbsolutePath(Path):
@@ -60,33 +54,3 @@ def get_type(name: str) -> t.Type[int] | t.Type[str] | t.Type[Path] | t.Type[Abs
             return AbsolutePath
         case invalid_type_name:
             raise UsageError(f"{invalid_type_name} is not a valid type")
-        
-def get_environment_variable_declarations_from_file(file: Path) -> list[DataInFile[EnvironmentVariableDeclaration]]:
-    var_declarations: list[DataInFile[EnvironmentVariableDeclaration]] = []
-    for i, line in filter(lambda x: x[1].strip(), enumerate(file.read_text().splitlines())):
-        try:
-            var_declaration = EnvironmentVariableDeclaration.from_line(line)
-        except UsageError as e:
-            raise UsageError(f"on line {i}", e.problem)
-        var_declarations.append(
-            DataInFile(
-                file=file,
-                line=i,
-                data=var_declaration)
-            )
-    return var_declarations
-
-def get_environment_variable_declarations_from_files(files: t.Iterable[Path]) -> list[DataInFile[EnvironmentVariableDeclaration]]:
-    var_declarations: list[DataInFile[EnvironmentVariableDeclaration]] = []
-    errors: list[UsageError] = []
-    for file in files:
-        try: 
-            var_declarations_in_file = get_environment_variable_declarations_from_file(file)
-        except UsageError as e:
-            errors.append(UsageError(f"in {file}", e.problem) )
-            continue
-        var_declarations.extend(var_declarations_in_file)
-    
-    if errors:
-        raise UsageErrorList("Error(s) parsing enviromnent variable declarations", errors)
-    return var_declarations 

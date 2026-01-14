@@ -1,7 +1,8 @@
 import os
 import typing as t
 
-from .variable_declaration import DataInFile, EnvironmentVariableDeclaration
+from .parsing import DataInFile
+from .variable_declaration import EnvironmentVariableDeclaration
 from .usage_error import UsageError, UsageErrorList
 
 
