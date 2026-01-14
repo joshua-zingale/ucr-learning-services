@@ -11,9 +11,10 @@ import sys
 import typing as t
 
 from .environment import raise_if_bad_environment_variable_declarations
+from .hosts import host_declaration_from_line
 from . import parsing
 from .usage_error import UsageError, UsageErrorList
-from .variable_declaration import EnvironmentVariableDeclaration
+from .variable_declaration import environment_variable_declaration_from_line
 
 def main():
     try:
@@ -31,53 +32,82 @@ def cli():
     )
 
     parser.add_argument("root", default=".", help="the root path, which will be searched recursively for environment variable and host files.")
-    parser.add_argument("--list", "-l", action="store_true", help="if set, lists all variables for which there are declarations")
-    parser.add_argument("--validate", "-v", action="store_true", help="if set, validates that all environment variables are well defined; leads an an undefined or improperly defined environment variable to cause the progra to exit with a non-zero exit status.")
-    parser.add_argument("--env-file-name", default="env_vars.txt", help="the name of the files that contain environment variable declarations.")
+    parser.add_argument("--list-environment-variables", "-le", action="store_true", help="if set, lists all variables for which there are declarations")
+    parser.add_argument("--list-hosts", "-lh", action="store_true", help="if set, lists all hosts for which there are declarations")
+    parser.add_argument("--validate-environment-variables", "-ve", action="store_true", help="if set, validates that all environment variables are well defined; leads an an undefined or improperly defined environment variable to cause the progra to exit with a non-zero exit status.")
+    parser.add_argument("--env-files-name", default="env_vars.txt", help="the name of the files that contain environment variable declarations.")
+    parser.add_argument("--host-files-name", default="hosts.txt", help="the name of the files that contain environment variable declarations.")
 
     args = parser.parse_args()
     root = Path(args.root)
-    env_file_name = str(args.env_file_name)
+    env_file_name = str(args.env_files_name)
+    host_files_name = str(args.host_files_name)
     actions_to_perform = actions if (actions := get_actions_to_perform(
-        list_declarations=args.list,
-        validate_environment=args.validate)) else {Action.ValidateDeclarations}
+        list_declarations=args.list_environment_variables,
+        list_hosts = args.list_hosts,
+        validate_environment=args.validate_environment_variables)) else {Action.ValidateDeclarations}
 
     environment_files = list(filter(lambda f: not f.is_dir(), root.glob(f"**/{env_file_name}")))
+    host_files = list(filter(lambda f: not f.is_dir(), root.glob(f"**/{host_files_name}")))
 
 
     try:
-        var_declarations = parsing.parse_from_files(EnvironmentVariableDeclaration.from_line, environment_files)
+        var_declarations = parsing.parse_from_files(environment_variable_declaration_from_line, environment_files)
+    except UsageError as e:
+        raise UsageError("parsing environment variable declarations", e.problem)
+    
+    try:
+        host_declarations = parsing.parse_from_files(host_declaration_from_line, host_files)
     except UsageError as e:
         raise UsageError("parsing environment variable declarations", e.problem)
     
     if Action.ListVars in actions_to_perform:
-        print(make_table(variable_declarations_to_columns(list(map(lambda x: x.data, var_declarations)))))
+        print(make_table(attributes_to_columns(
+            {
+                "name": "VAR NAME",
+                "var_type": "TYPE",
+                "description": "DESCRIPTION",
+            },
+            list(map(lambda x: x.data, var_declarations)),
+            field_serializers={
+                "var_type": lambda x: x.__name__
+            })))
+        
+    if Action.ListHosts in actions_to_perform:
+        print(make_table(attributes_to_columns(
+            {
+                "name": "HOST NAME",
+                "description": "DESCRIPTION",
+            },
+            list(map(lambda x: x.data, host_declarations)))))
+        
     
     if Action.ValidateDeclarations in actions_to_perform:
         raise_if_bad_environment_variable_declarations(var_declarations)
         print("All environment variables are defined and passed type validation.")
+    
 
 
 class Action(enum.Enum):
     ListVars = 1
     ValidateDeclarations = 2
+    ListHosts = 3
 
-def get_actions_to_perform(*, list_declarations: bool, validate_environment: bool) -> set[Action]:
+def get_actions_to_perform(*, list_declarations: bool, validate_environment: bool, list_hosts: bool) -> set[Action]:
     def not_none(v: Action | None) -> t.TypeGuard[Action]:
         return v is not None
     return set[Action](filter(not_none, [
         Action.ListVars if list_declarations else None,
         Action.ValidateDeclarations if validate_environment else None,
+        Action.ListHosts if list_hosts else None
     ]))
 
 
-def variable_declarations_to_columns(variable_declarations: t.Sequence[EnvironmentVariableDeclaration]) -> dict[str, list[str]]:
+def attributes_to_columns[T](field_name_to_display_name: dict[str, str], data: t.Sequence[T], *, field_serializers: dict[str, t.Callable[[t.Any], str]] = {}) -> dict[str, list[str]]:
+    
     return {
-        "VAR NAME": [vd.name for vd in variable_declarations],
-        "TYPE": [vd.var_type.__name__ for vd in variable_declarations],
-        "DESCRIPTION": [vd.description for vd in variable_declarations]
+        display_name: [field_serializers.get(field_name, lambda x: x)(getattr(datum, field_name)) for datum in data] for field_name, display_name in field_name_to_display_name.items()
     }
-
 def make_table(columns: dict[str, list[str]], column_spacing: int = 4) -> str:
 
     assert len(set([len(rows) for rows in columns.values()])) == 1

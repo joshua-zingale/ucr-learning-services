@@ -22,23 +22,22 @@ class EnvironmentVariableDeclaration:
     var_type: t.Type[int] | t.Type[str] | t.Type[Path] | t.Type[AbsolutePath]
     description: str
 
-    @staticmethod
-    def from_line(line: str) -> "EnvironmentVariableDeclaration":
-        try:
-            name, name_of_type, description = map(str.strip, line.split("|"))
-        except ValueError as e:
-            raise UsageError(f"each line must have three values, separated by |, like VAR_NAME|type|A description")
+def environment_variable_declaration_from_line(line: str) -> "EnvironmentVariableDeclaration":
+    try:
+        name, name_of_type, description = map(str.strip, line.split("|"))
+    except ValueError as e:
+        raise UsageError(f"each line must have three values, separated by |, like VAR_NAME|type|A description")
 
-        try:
-            var_type = get_type(name_of_type)
-        except UsageError as e:
-            raise UsageError(f"defining {name}", e.problem)
-        
-        return EnvironmentVariableDeclaration(
-                name=name,
-                var_type=var_type,
-                description=description
-            )
+    try:
+        var_type = get_type(name_of_type)
+    except UsageError as e:
+        raise UsageError(f"defining {name}", e.problem)
+    
+    return EnvironmentVariableDeclaration(
+            name=name,
+            var_type=var_type,
+            description=description
+        )
 
 
 
