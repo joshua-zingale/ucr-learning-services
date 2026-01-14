@@ -1,4 +1,5 @@
 PORT|int|The port on which nginx broadcasts the infrastructure and web services (e.g. "80" or "5000").
+HOST|str|The host at which nginx broadcasts the infrastructure and web services (e.g. "127.0.0.1").
 
 OAUTH2_PROXY_COOKIE_SECRET|str|The seed string for secure cookies (optionally base64 encoded).
 OAUTH2_PROXY_CLIENT_SECRET|str|The secret key for Google's OAuth protocol.
