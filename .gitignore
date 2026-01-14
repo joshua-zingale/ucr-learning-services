@@ -1,2 +1,7 @@
 __pycache__
 .venv
+
+
+# Do not include compiled configuration files
+*.compiled.conf
+!*.template.conf
