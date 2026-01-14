@@ -1,3 +1,0 @@
-OAUTH2_PROXY_COOKIE_SECRET|str|The seed string for secure cookies (optionally base64 encoded).
-OAUTH2_PROXY_CLIENT_SECRET|str|The secret key for Google's OAuth protocol.
-OAUTH2_PROXY_REDIRECT_PATH|str|The path after the host and port for the OAuth2.0 redirect URI.
