@@ -1,0 +1,2 @@
+NGINX_PORT|int|The (maybe virtual) port on which NGINX boradcasts the services, e.g. "80" or "5000".
+NGINX_HOST|str|The (maybe virtual) host at which NGINX boradcasts the services, e.g. "127.0.0.1", "example.domain.com".

@@ -1,0 +1,21 @@
+email_domains = [
+    "ucr.edu",
+    ]
+reverse_proxy = true
+set_xauthrequest= true
+
+http_address = "0.0.0.0:4180"
+proxy_prefix = "/oauth2"
+redirect_url = "http://auth.${EXTERNAL_HOST}:${EXTERNAL_PORT}/oauth2/callback"
+
+cookie_domains = [
+    ".${EXTERNAL_HOST}"
+]
+cookie_samesite = "lax"
+cookie_secure = false
+
+whitelist_domains = [
+    ".${EXTERNAL_HOST}:${EXTERNAL_PORT}"
+]
+
+show_debug_on_error = true

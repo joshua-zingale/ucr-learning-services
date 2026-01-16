@@ -1,6 +1,3 @@
-PORT|int|The port on which nginx broadcasts the infrastructure and web services (e.g. "80" or "5000").
-HOST|str|The host at which nginx broadcasts the infrastructure and web services (e.g. "127.0.0.1", "example.domain.com").
+EXTERNAL_PORT|int|The port on which the services are broadcast (e.g. "80" or "5000").
+EXTERNAL_HOST|str|The host at which the services are broadcast (e.g. "127.0.0.1", "example.domain.com").
 
-OAUTH2_PROXY_COOKIE_SECRET|str|The seed string for secure cookies (optionally base64 encoded).
-OAUTH2_PROXY_CLIENT_SECRET|str|The secret key for Google's OAuth protocol.
-OAUTH2_PROXY_REDIRECT_PATH|absolute path|The path after the host and port for the OAuth2.0 redirect URI (e.g. "/oauth2/callback").

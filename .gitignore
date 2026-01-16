@@ -3,5 +3,4 @@ __pycache__
 
 
 # Do not include compiled configuration files
-*.compiled.conf
-!*.template.conf
+*.compiled

@@ -1,1 +1,2 @@
 nginx|The NGINX server
+oauth2-proxy|The authentication proxy

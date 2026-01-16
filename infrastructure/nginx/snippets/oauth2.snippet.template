@@ -1,0 +1,20 @@
+location /oauth2/ {
+  proxy_pass http://oauth2-proxy:4180;
+  proxy_set_header  Host  $host;
+  proxy_set_header X-Real-IP  $remote_addr;
+  proxy_set_header  X-Auth-Request-Redirect $request_uri;
+}
+
+location = /oauth2/auth {
+  proxy_pass       http://oauth2-proxy:4180;
+  proxy_set_header Host             $host;
+  proxy_set_header X-Real-IP        $remote_addr;
+  proxy_set_header X-Forwarded-Uri  $request_uri;
+
+  proxy_set_header Content-Length   "";
+  proxy_pass_request_body           off;
+}
+
+location @sign_in {
+    return 302 http://auth.${EXTERNAL_HOST}:${EXTERNAL_PORT}/oauth2/sign_in?rd=$scheme://$http_host$request_uri;
+}
