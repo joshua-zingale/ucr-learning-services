@@ -1,6 +1,7 @@
 __pycache__
 .venv
 
+.env
 
 # Do not include compiled configuration files
 *.compiled
