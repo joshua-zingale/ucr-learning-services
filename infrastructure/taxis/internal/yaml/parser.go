@@ -5,17 +5,19 @@ import (
 	"regexp"
 )
 
-type combinator func(*parserState) (*production, *ParsingError)
+type combinator[T any] func(*parserState) (*production[T], *ParsingError)
 
-type production struct {
+type production[T any] struct {
 	state parserState
-	value YamlValue
+	value T
 }
 
 type parserState struct {
-	line      int
-	char      int
-	remaining string
+	line        int
+	char        int
+	remaining   string
+	indentation int
+	eofConsumed bool
 }
 
 type ParsingError struct {
@@ -46,9 +48,10 @@ func (pe *ParsingError) rewriteMessage(message string) *ParsingError {
 
 func NewparserState(source string) parserState {
 	return parserState{
-		line:      0,
-		char:      0,
-		remaining: source,
+		line:        0,
+		char:        0,
+		remaining:   source,
+		eofConsumed: false,
 	}
 }
 
@@ -64,9 +67,11 @@ func (ps *parserState) Advance(numBytes int) *parserState {
 		}
 	}
 	return &parserState{
-		line:      line,
-		char:      char,
-		remaining: ps.remaining[numBytes:],
+		line:        line,
+		char:        char,
+		remaining:   ps.remaining[numBytes:],
+		indentation: ps.indentation,
+		eofConsumed: ps.eofConsumed,
 	}
 }
 
@@ -84,25 +89,32 @@ type YamlValue interface {
 
 func ParseYaml(source string) (YamlValue, error) {
 	initialState := NewparserState(source)
-	prod, err := newDashListParser(0)(&initialState)
+	prod, err := first[YamlList, string](first(newDashListParser(0), repeated(parseEmptyLine)), first[string, string](optional(parseInlineWhiteSpace), parseEOF))(&initialState)
 	if err != nil {
 		return nil, err
 	}
 	return prod.value, nil
 }
 
-var parseEOLorEOF combinator = second(optional(parseInlineWhiteSpace), or("end of line or end of file", parseEOF, parseLineBreak))
+var parseEOLorEOF = or("end of line or end of file", parseEOF, parseLineBreak)
 
-var parseWhiteSpace combinator = repeatedAsList(or("whitespace", parseInlineWhiteSpace, parseEOLorEOF))
+var parseWhiteSpace = repeated(or("whitespace", parseInlineWhiteSpace, parseEOLorEOF))
 
-func newDashListParser(numLeadingSpaces int) combinator {
-	return first(newListParserSeparatedBy(second(optional(parseInlineWhiteSpace), parseLineBreak), newSpaceIndentedParser(numLeadingSpaces, parseDashItem)), parseEOLorEOF)
+// func parseDashList(state *parserState) (production[YamlList], error) {
+// 	return
+// }
+
+var parseEmptyLine = second(optional(parseInlineWhiteSpace), parseLineBreak)
+
+func newDashListParser(numLeadingSpaces int) combinator[YamlList] {
+	return mapOut(func(l []string) YamlList { return YamlList(l) },
+		separatedBy(second(optional(parseInlineWhiteSpace), first(parseLineBreak, repeated(parseEmptyLine))), newSpaceIndentedParser(numLeadingSpaces, parseDashItem)))
 }
 
-var parseDashItem combinator = second(newStringParser("-"), second(parseInlineWhiteSpace, parseUserId))
+var parseDashItem = second(newStringParser("-"), second(parseInlineWhiteSpace, parseUserId))
 
-func newSpaceIndentedParser(indentationLevel int, c combinator) combinator {
-	return func(ps *parserState) (*production, *ParsingError) {
+func newSpaceIndentedParser[T any](indentationLevel int, c combinator[T]) combinator[T] {
+	return func(ps *parserState) (*production[T], *ParsingError) {
 
 		observedIndentation := 0
 		for observedIndentation < len(ps.remaining) && ps.remaining[observedIndentation] == ' ' {
@@ -117,12 +129,12 @@ func newSpaceIndentedParser(indentationLevel int, c combinator) combinator {
 	}
 }
 
-var parseUserId combinator = newRegexParser("user ID", *regexp.MustCompile(`^([\w@\.\-]+)`))
+var parseUserId = newRegexParser("user ID", *regexp.MustCompile(`^([\w@\.\-]+)`))
 
-var groupIdRegex combinator = newRegexParser("group ID", *regexp.MustCompile(`^([\w\-]+):`))
+var groupIdRegex = newRegexParser("group ID", *regexp.MustCompile(`^([\w\-]+):`))
 
-func first(firstc combinator, secondc combinator) combinator {
-	return func(ps *parserState) (*production, *ParsingError) {
+func first[T, U any](firstc combinator[T], secondc combinator[U]) combinator[T] {
+	return func(ps *parserState) (*production[T], *ParsingError) {
 		prod1, err := firstc(ps)
 		if err != nil {
 			return nil, err
@@ -131,15 +143,15 @@ func first(firstc combinator, secondc combinator) combinator {
 		if err != nil {
 			return nil, err
 		}
-		return &production{
+		return &production[T]{
 			state: prod2.state,
 			value: prod1.value,
 		}, nil
 	}
 }
 
-func second(firstc combinator, secondc combinator) combinator {
-	return func(ps *parserState) (*production, *ParsingError) {
+func second[T, U any](firstc combinator[T], secondc combinator[U]) combinator[U] {
+	return func(ps *parserState) (*production[U], *ParsingError) {
 		prod1, err := firstc(ps)
 		if err != nil {
 			return nil, err
@@ -148,19 +160,18 @@ func second(firstc combinator, secondc combinator) combinator {
 		if err != nil {
 			return nil, err
 		}
-		return &production{
+		return &production[U]{
 			state: prod2.state,
 			value: prod2.value,
 		}, nil
 	}
 }
 
-func optional(c combinator) combinator {
-	return func(ps *parserState) (*production, *ParsingError) {
+func optional[T any](c combinator[T]) combinator[T] {
+	return func(ps *parserState) (*production[T], *ParsingError) {
 		prod, err := c(ps)
 		if err != nil {
-			return &production{
-				value: nil,
+			return &production[T]{
 				state: *ps,
 			}, nil
 		}
@@ -168,81 +179,108 @@ func optional(c combinator) combinator {
 	}
 }
 
-func parseInlineWhiteSpace(state *parserState) (*production, *ParsingError) {
+func mapOut[T, U any](f func(T) U, c combinator[T]) combinator[U] {
+	return func(ps *parserState) (*production[U], *ParsingError) {
+		prod, err := c(ps)
+		if err != nil {
+			return nil, err
+		}
+		return &production[U]{
+			state: prod.state,
+			value: f(prod.value),
+		}, nil
+	}
+}
+
+func parseInlineWhiteSpace(state *parserState) (*production[string], *ParsingError) {
 	for index, b := range state.remaining {
 		if b != ' ' {
 			if index == 0 {
 				return nil, state.newError("expected inline whitespace")
 			}
-			fmt.Println(index, state.remaining)
-			return &production{
+			return &production[string]{
 				state: *state.Advance(index),
 			}, nil
 		}
 	}
+	if len(state.remaining) > 0 {
+		return &production[string]{
+			state: *state.Advance(len(state.remaining)),
+		}, nil
+	}
 	return nil, state.newError("expected inline whitespace")
 }
 
-func newRegexParser(productionName string, re regexp.Regexp) combinator {
+func newRegexParser(productionName string, re regexp.Regexp) combinator[string] {
 
-	return func(state *parserState) (*production, *ParsingError) {
+	return func(state *parserState) (*production[string], *ParsingError) {
 		submatches := re.FindStringSubmatch(state.remaining)
 		if len(submatches) == 0 {
 			return nil, state.newError(fmt.Sprintf("invalid %s", productionName))
 		}
 
-		return &production{
+		return &production[string]{
 			state: *state.Advance(len(submatches[0])),
-			value: YamlString(submatches[1]),
+			value: submatches[1],
 		}, nil
 	}
 
 }
 
-func newStringParser(s string) combinator {
-	return func(ps *parserState) (*production, *ParsingError) {
+func newStringParser(s string) combinator[string] {
+	return func(ps *parserState) (*production[string], *ParsingError) {
 
 		if len(ps.remaining) >= len(s) && ps.remaining[:len(s)] == s {
-			return &production{
+			return &production[string]{
 				state: *ps.Advance(len(s)),
-				value: YamlString(s)}, nil
+				value: s}, nil
 		}
 
 		return nil, ps.newError(fmt.Sprintf("expected '%s'", s))
 	}
 }
 
-func parseLineBreak(state *parserState) (*production, *ParsingError) {
+func parseLineBreak(state *parserState) (*production[string], *ParsingError) {
 	if len(state.remaining) == 0 {
 		return nil, state.newError("expected line break")
 	}
 
 	if len(state.remaining) > 1 && state.remaining[0] == '\r' && state.remaining[1] == '\n' {
-		return &production{
+		return &production[string]{
 			state: *state.Advance(2),
 		}, nil
 	} else if state.remaining[0] == '\n' || state.remaining[0] == '\r' {
-		return &production{
+		return &production[string]{
 			state: *state.Advance(1),
 		}, nil
 	}
 	return nil, state.newError("expected line break")
 }
 
-func parseEOF(state *parserState) (*production, *ParsingError) {
+func parseEOF[T any](state *parserState) (*production[T], *ParsingError) {
+
 	if len(state.remaining) != 0 {
+		fmt.Printf("'%s'\n", state.remaining)
 		return nil, state.newError("expected the end of the file")
 	}
-	return &production{
-		state: *state,
-		value: nil,
+	if state.eofConsumed {
+		return nil, state.newError("nothing left to parse")
+	}
+	return &production[T]{
+		state: parserState{
+			line:        state.line,
+			char:        state.char,
+			remaining:   state.remaining,
+			indentation: state.indentation,
+			eofConsumed: true,
+		},
 	}, nil
 }
 
-func or(name string, combinators ...combinator) combinator {
+func or[T any](name string, combinators ...combinator[T]) combinator[T] {
 
 	var latestError *ParsingError = nil
-	return func(ps *parserState) (*production, *ParsingError) {
+	return func(ps *parserState) (*production[T], *ParsingError) {
 		for _, c := range combinators {
 			if prod, err := c(ps); err == nil {
 				return prod, nil
@@ -254,14 +292,26 @@ func or(name string, combinators ...combinator) combinator {
 	}
 }
 
-func repeatedAsList(c combinator) combinator {
-	return func(ps *parserState) (*production, *ParsingError) {
-		var list YamlList
+func atLeastOne[T any](name string, c combinator[[]T]) combinator[[]T] {
+	return func(ps *parserState) (*production[[]T], *ParsingError) {
+		prod, err := c(ps)
+		if err != nil {
+			if len(prod.value) == 0 {
+				return nil, ps.newError(fmt.Sprintf("expected at least one %s", name))
+			}
+		}
+		return prod, nil
+	}
+}
+
+func repeated[T any](c combinator[T]) combinator[[]T] {
+	return func(ps *parserState) (*production[[]T], *ParsingError) {
+		var list []T
 		var state *parserState = ps
 		for {
 			prod, err := c(state)
 			if err != nil {
-				return &production{
+				return &production[[]T]{
 					state: *state,
 					value: list,
 				}, nil
@@ -273,38 +323,35 @@ func repeatedAsList(c combinator) combinator {
 
 }
 
-func newListParserSeparatedBy(separator combinator, c combinator) combinator {
-	return func(ps *parserState) (*production, *ParsingError) {
-		var list YamlList
-		var state *parserState = ps
+func separatedBy[T, U any](separator combinator[T], c combinator[U]) combinator[[]U] {
+	return func(ps *parserState) (*production[[]U], *ParsingError) {
+		var list []U
+		var afterItemState parserState = *ps
+		var afterSeparatorState parserState = *ps
 		for {
-			prod, err := c(state)
+			prod1, err := c(&afterSeparatorState)
 			if err != nil {
-				return &production{
-					state: *state,
+				return &production[[]U]{
+					state: afterItemState,
 					value: list,
 				}, nil
 			}
-			list = append(list, prod.value)
-			state = &prod.state
-			prod, err = separator(state)
+			list = append(list, prod1.value)
+			afterItemState = prod1.state
+			prod2, err := separator(&afterItemState)
 			if err != nil {
-				return &production{
-					state: *state,
+				return &production[[]U]{
+					state: afterItemState,
 					value: list,
 				}, nil
 			}
-			state = &prod.state
+			afterSeparatorState = prod2.state
 		}
 	}
-
 }
 
-type YamlString string
 type YamlMap map[string]YamlValue
-type YamlList []YamlValue
-
-func (s YamlString) isYamlValue() {}
+type YamlList []string
 
 func (m YamlMap) isYamlValue()  {}
 func (m YamlList) isYamlValue() {}

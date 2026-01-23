@@ -8,5 +8,5 @@ import (
 
 func main() {
 
-	fmt.Println(yaml.ParseYaml("- tom\n- dick\n- harry"))
+	fmt.Println(yaml.ParseYaml("- tom   \n  \n- dick.j   \n-      harry"))
 }

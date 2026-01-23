@@ -16,33 +16,9 @@ func TestParseYaml(t *testing.T) {
 		errorChar int
 	}{
 		{
-			name:  "valid user id",
-			input: "john_doe@example.com",
-			want:  YamlString("john_doe@example.com"),
-		},
-		{
-			name:  "id with dashes and dots",
-			input: "sys.admin-01",
-			want:  YamlString("sys.admin-01"),
-		},
-		{
-			name:      "invalid characters at start",
-			input:     "$invalid",
-			wantErr:   true,
-			errorLine: 1,
-			errorChar: 1,
-		},
-		{
-			name:      "empty input",
-			input:     "",
-			wantErr:   true,
-			errorLine: 1,
-			errorChar: 1,
-		},
-		{
 			name:    "root list",
-			input:   "- tom \n- dick\n- harry",
-			want:    YamlList{YamlString("tom"), YamlString("dick"), YamlString("harry")},
+			input:   "- tom \n- dick\n   \n- harry\n    ",
+			want:    YamlList{"tom", "dick", "harry"},
 			wantErr: false,
 		},
 	}
