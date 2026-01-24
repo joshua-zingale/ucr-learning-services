@@ -3,27 +3,18 @@ package yaml
 import (
 	"fmt"
 	"regexp"
+	"unicode/utf8"
 )
 
-type combinator[T any] func(*parserState) (*production[T], *ParsingError)
-
-type production[T any] struct {
-	state parserState
-	value T
-}
-
-type parserState struct {
-	line        int
-	char        int
-	remaining   string
-	indentation int
-	eofConsumed bool
+type Position struct {
+	line int
+	char int
 }
 
 type ParsingError struct {
-	line    int
-	char    int
+	Position
 	message string
+	parent  *ParsingError
 }
 
 func (pe *ParsingError) Error() string {
@@ -32,326 +23,329 @@ func (pe *ParsingError) Error() string {
 
 func (pe *ParsingError) addContext(message string) *ParsingError {
 	return &ParsingError{
-		line:    pe.line,
-		char:    pe.char,
+		Position: Position{
+			line: pe.line,
+			char: pe.char,
+		},
 		message: fmt.Sprintf("%s: %s", message, pe.message),
 	}
 }
 
-func (pe *ParsingError) rewriteMessage(message string) *ParsingError {
-	return &ParsingError{
-		line:    pe.line,
-		char:    pe.char,
-		message: message,
+type Parser struct {
+	Position
+	offset int
+	source string
+}
+
+func NewYamlParser(source string) *Parser {
+	return &Parser{
+		source: source,
 	}
 }
 
-func NewparserState(source string) parserState {
-	return parserState{
-		line:        0,
-		char:        0,
-		remaining:   source,
-		eofConsumed: false,
-	}
+func ParseYaml(source string) (any, *ParsingError) {
+	parser := NewYamlParser(source)
+	return parser.parseValue(0)
 }
 
-func (ps *parserState) Advance(numBytes int) *parserState {
-	line := ps.line
-	char := ps.char
-	for _, b := range ps.remaining[:numBytes] {
-		if b == '\n' {
-			line += 1
-			char = 0
-		} else {
-			char += 1
-		}
-	}
-	return &parserState{
-		line:        line,
-		char:        char,
-		remaining:   ps.remaining[numBytes:],
-		indentation: ps.indentation,
-		eofConsumed: ps.eofConsumed,
-	}
-}
+// func (p *Parser) advanceToNextContent() int {
+// 	p.skipWhitespace()
 
-func (ps *parserState) newError(message string) *ParsingError {
-	return &ParsingError{
-		line:    ps.line,
-		char:    ps.char,
-		message: message,
-	}
-}
-
-type YamlValue interface {
-	isYamlValue()
-}
-
-func ParseYaml(source string) (YamlValue, error) {
-	initialState := NewparserState(source)
-	prod, err := first[YamlList, string](first(newDashListParser(0), repeated(parseEmptyLine)), first[string, string](optional(parseInlineWhiteSpace), parseEOF))(&initialState)
-	if err != nil {
-		return nil, err
-	}
-	return prod.value, nil
-}
-
-var parseEOLorEOF = or("end of line or end of file", parseEOF, parseLineBreak)
-
-var parseWhiteSpace = repeated(or("whitespace", parseInlineWhiteSpace, parseEOLorEOF))
-
-// func parseDashList(state *parserState) (production[YamlList], error) {
-// 	return
 // }
 
-var parseEmptyLine = second(optional(parseInlineWhiteSpace), parseLineBreak)
+// Returns -1 if there is no next line that is indented
+func (p *Parser) getNextLineIndentation() int {
+	p2 := *p
 
-func newDashListParser(numLeadingSpaces int) combinator[YamlList] {
-	return mapOut(func(l []string) YamlList { return YamlList(l) },
-		separatedBy(second(optional(parseInlineWhiteSpace), first(parseLineBreak, repeated(parseEmptyLine))), newSpaceIndentedParser(numLeadingSpaces, parseDashItem)))
-}
-
-var parseDashItem = second(newStringParser("-"), second(parseInlineWhiteSpace, parseUserId))
-
-func newSpaceIndentedParser[T any](indentationLevel int, c combinator[T]) combinator[T] {
-	return func(ps *parserState) (*production[T], *ParsingError) {
-
-		observedIndentation := 0
-		for observedIndentation < len(ps.remaining) && ps.remaining[observedIndentation] == ' ' {
-			observedIndentation += 1
+	for !p2.consumeLineBreak() {
+		r, ok := p2.peek()
+		if !ok {
+			return -1
 		}
-		if observedIndentation != indentationLevel {
-			return nil, ps.newError(fmt.Sprintf("invalid indentation: found %d but expected %d", observedIndentation, indentationLevel))
-		}
-
-		// " " is a one-byte character
-		return c(ps.Advance(observedIndentation))
+		p2.advance(r)
 	}
+
+	p2.skipWhitespace()
+
+	if p2.isEOF() {
+		return -1
+	}
+
+	return p2.char
 }
 
-var parseUserId = newRegexParser("user ID", *regexp.MustCompile(`^([\w@\.\-]+)`))
+func (p *Parser) parseValue(minimumIndentation int) (any, *ParsingError) {
 
-var groupIdRegex = newRegexParser("group ID", *regexp.MustCompile(`^([\w\-]+):`))
+	isBeginningOfDocument := p.offset == 0
+	lookahead := *p
+	lookahead.skipWhitespace()
 
-func first[T, U any](firstc combinator[T], secondc combinator[U]) combinator[T] {
-	return func(ps *parserState) (*production[T], *ParsingError) {
-		prod1, err := firstc(ps)
+	if lookahead.line == p.line && !isBeginningOfDocument && !lookahead.isEOF() {
+		r, ok := p.peek()
+		if !ok {
+			panic("unreachable! 76b76trxs")
+		}
+		return nil, p.newUnexpectedCharacterError("line break", r)
+	}
+
+	contentIndentation := lookahead.char
+	if contentIndentation < minimumIndentation {
+		return []string{}, nil
+	}
+
+	*p = lookahead
+
+	if firstKey, err := p.parseKey(); err == nil {
+		v, err := p.parseMap(firstKey, contentIndentation)
+		if err != nil {
+			return nil, err.addContext("parsing map")
+		}
+		return v, nil
+	}
+
+	if firstItem, err := p.parseDashItem(); err == nil {
+		v, err := p.parseDashList(firstItem, contentIndentation)
+		if err != nil {
+			return nil, err.addContext("parsing dash list")
+		}
+		return v, nil
+	}
+
+	return nil, p.newError("expected mapping or list")
+
+}
+
+var keyRegex = regexp.MustCompile(`^([a-zA-Z]\w*):`)
+
+func (p *Parser) parseKey() (string, *ParsingError) {
+	matches, err := p.parseRegex(keyRegex)
+
+	if err != nil {
+		return "", err
+	}
+	return matches[1], err
+
+}
+
+func (p *Parser) parseMap(firstKey string, indentation int) (map[string]any, *ParsingError) {
+
+	outputMap := make(map[string]any)
+
+	key := firstKey
+	for {
+		value, err := p.parseValue(indentation + 1)
+		if err != nil {
+			return nil, err.addContext("parsing map value")
+		}
+		outputMap[key] = value
+
+		lookahead := *p
+
+		lookahead.skipWhitespace()
+		if lookahead.isEOF() {
+			break
+		}
+		if lookahead.line == p.line {
+			return nil, lookahead.newError("expected line break")
+		}
+
+		if lookahead.char > indentation {
+			return nil, lookahead.newError("invalid indentation")
+		}
+
+		if lookahead.char < indentation {
+			break
+		}
+
+		*p = lookahead
+
+		nextKey, err := p.parseKey()
 		if err != nil {
 			return nil, err
 		}
-		prod2, err := secondc(&prod1.state)
+
+		key = nextKey
+	}
+
+	return outputMap, nil
+}
+
+var dashItemRegex = regexp.MustCompile(`^- +([\w-@\.]+)`)
+
+func (p *Parser) parseDashItem() (string, *ParsingError) {
+	matches, err := p.parseRegex(dashItemRegex)
+	if err != nil {
+		return "", nil
+	}
+	return matches[1], nil
+}
+
+func (p *Parser) parseDashList(firstItem string, indentation int) ([]string, *ParsingError) {
+
+	outList := []string{firstItem}
+
+	for {
+		lookahead := *p
+		lookahead.skipWhitespace()
+
+		if lookahead.isEOF() {
+			break
+		}
+
+		if lookahead.line == p.line {
+			return nil, lookahead.newError("expected line break")
+		}
+
+		if lookahead.char > indentation {
+			return nil, lookahead.newError(fmt.Sprintf("expected indentation of %d space(s) but encountered an indentation of %d", indentation, lookahead.char))
+		}
+
+		if lookahead.char < indentation {
+			break
+		}
+
+		*p = lookahead
+
+		nextItem, err := p.parseDashItem()
 		if err != nil {
 			return nil, err
 		}
-		return &production[T]{
-			state: prod2.state,
-			value: prod1.value,
-		}, nil
+
+		outList = append(outList, nextItem)
+	}
+
+	return outList, nil
+}
+
+func (p *Parser) newError(message string) *ParsingError {
+	return &ParsingError{
+		Position: p.Position,
+		message:  message,
 	}
 }
 
-func second[T, U any](firstc combinator[T], secondc combinator[U]) combinator[U] {
-	return func(ps *parserState) (*production[U], *ParsingError) {
-		prod1, err := firstc(ps)
-		if err != nil {
-			return nil, err
-		}
-		prod2, err := secondc(&prod1.state)
-		if err != nil {
-			return nil, err
-		}
-		return &production[U]{
-			state: prod2.state,
-			value: prod2.value,
-		}, nil
-	}
+func (p *Parser) newUnexpectedCharacterError(expected string, r rune) *ParsingError {
+	return p.newError(fmt.Sprintf("expected %s but found '%c'", expected, r))
 }
 
-func optional[T any](c combinator[T]) combinator[T] {
-	return func(ps *parserState) (*production[T], *ParsingError) {
-		prod, err := c(ps)
-		if err != nil {
-			return &production[T]{
-				state: *ps,
-			}, nil
-		}
-		return prod, nil
+func (p *Parser) advance(r rune) {
+
+	length := utf8.RuneLen(r)
+
+	if p.offset+length > len(p.source) {
+		panic("internal error: attempted to advance parser beyond source boundry")
 	}
+
+	if r == '\n' {
+		p.line += 1
+		p.char = 0
+	} else {
+		p.char += 1
+	}
+
+	p.offset += length
 }
 
-func mapOut[T, U any](f func(T) U, c combinator[T]) combinator[U] {
-	return func(ps *parserState) (*production[U], *ParsingError) {
-		prod, err := c(ps)
-		if err != nil {
-			return nil, err
-		}
-		return &production[U]{
-			state: prod.state,
-			value: f(prod.value),
-		}, nil
+func (p *Parser) peek() (rune, bool) {
+
+	if p.offset >= len(p.source) {
+		return 0, false
 	}
+	for _, r := range p.source[p.offset:] {
+		return r, true
+	}
+	panic("unreachable! 3h8fuen")
 }
 
-func parseInlineWhiteSpace(state *parserState) (*production[string], *ParsingError) {
-	for index, b := range state.remaining {
-		if b != ' ' {
-			if index == 0 {
-				return nil, state.newError("expected inline whitespace")
+func (p *Parser) next() (rune, bool) {
+	if r, ok := p.peek(); ok {
+		p.advance(r)
+		return r, ok
+	}
+	return 0, false
+}
+
+var lineBreakingSequences []string = []string{
+	"\n",
+	"\r\n",
+	"\r",
+}
+
+func (p *Parser) isLineBreak() bool {
+	for _, sequence := range lineBreakingSequences {
+		if len(sequence) > len(p.source)-p.offset {
+			continue
+		}
+		if p.source[p.offset:p.offset+len(sequence)] == sequence {
+			return true
+		}
+	}
+	return false
+}
+
+func (p *Parser) isEOF() bool {
+	return len(p.source) <= p.offset
+}
+
+func (p *Parser) consumeLineBreak() bool {
+	for _, sequence := range lineBreakingSequences {
+		if len(sequence) > len(p.source)-p.offset {
+			continue
+		}
+		sourceSequence := p.source[p.offset : p.offset+len(sequence)]
+		if sourceSequence == sequence {
+			for _, r := range sourceSequence {
+				p.advance(r)
 			}
-			return &production[string]{
-				state: *state.Advance(index),
-			}, nil
+			return true
 		}
 	}
-	if len(state.remaining) > 0 {
-		return &production[string]{
-			state: *state.Advance(len(state.remaining)),
-		}, nil
-	}
-	return nil, state.newError("expected inline whitespace")
+	return false
 }
 
-func newRegexParser(productionName string, re regexp.Regexp) combinator[string] {
-
-	return func(state *parserState) (*production[string], *ParsingError) {
-		submatches := re.FindStringSubmatch(state.remaining)
-		if len(submatches) == 0 {
-			return nil, state.newError(fmt.Sprintf("invalid %s", productionName))
+func (p *Parser) skipInlineWhitespace() {
+	for {
+		r, ok := p.peek()
+		if !ok || r != ' ' {
+			break
 		}
-
-		return &production[string]{
-			state: *state.Advance(len(submatches[0])),
-			value: submatches[1],
-		}, nil
-	}
-
-}
-
-func newStringParser(s string) combinator[string] {
-	return func(ps *parserState) (*production[string], *ParsingError) {
-
-		if len(ps.remaining) >= len(s) && ps.remaining[:len(s)] == s {
-			return &production[string]{
-				state: *ps.Advance(len(s)),
-				value: s}, nil
-		}
-
-		return nil, ps.newError(fmt.Sprintf("expected '%s'", s))
+		p.advance(r)
 	}
 }
 
-func parseLineBreak(state *parserState) (*production[string], *ParsingError) {
-	if len(state.remaining) == 0 {
-		return nil, state.newError("expected line break")
-	}
-
-	if len(state.remaining) > 1 && state.remaining[0] == '\r' && state.remaining[1] == '\n' {
-		return &production[string]{
-			state: *state.Advance(2),
-		}, nil
-	} else if state.remaining[0] == '\n' || state.remaining[0] == '\r' {
-		return &production[string]{
-			state: *state.Advance(1),
-		}, nil
-	}
-	return nil, state.newError("expected line break")
-}
-
-func parseEOF[T any](state *parserState) (*production[T], *ParsingError) {
-
-	if len(state.remaining) != 0 {
-		fmt.Printf("'%s'\n", state.remaining)
-		return nil, state.newError("expected the end of the file")
-	}
-	if state.eofConsumed {
-		return nil, state.newError("nothing left to parse")
-	}
-	return &production[T]{
-		state: parserState{
-			line:        state.line,
-			char:        state.char,
-			remaining:   state.remaining,
-			indentation: state.indentation,
-			eofConsumed: true,
-		},
-	}, nil
-}
-
-func or[T any](name string, combinators ...combinator[T]) combinator[T] {
-
-	var latestError *ParsingError = nil
-	return func(ps *parserState) (*production[T], *ParsingError) {
-		for _, c := range combinators {
-			if prod, err := c(ps); err == nil {
-				return prod, nil
-			} else if latestError == nil || err.line > latestError.line || err.line == latestError.line && err.char > latestError.char {
-				latestError = err
-			}
-		}
-		return nil, latestError.rewriteMessage(fmt.Sprintf("expected %s", name))
-	}
-}
-
-func atLeastOne[T any](name string, c combinator[[]T]) combinator[[]T] {
-	return func(ps *parserState) (*production[[]T], *ParsingError) {
-		prod, err := c(ps)
-		if err != nil {
-			if len(prod.value) == 0 {
-				return nil, ps.newError(fmt.Sprintf("expected at least one %s", name))
-			}
-		}
-		return prod, nil
-	}
-}
-
-func repeated[T any](c combinator[T]) combinator[[]T] {
-	return func(ps *parserState) (*production[[]T], *ParsingError) {
-		var list []T
-		var state *parserState = ps
-		for {
-			prod, err := c(state)
-			if err != nil {
-				return &production[[]T]{
-					state: *state,
-					value: list,
-				}, nil
-			}
-			list = append(list, prod.value)
-			state = &prod.state
-		}
-	}
-
-}
-
-func separatedBy[T, U any](separator combinator[T], c combinator[U]) combinator[[]U] {
-	return func(ps *parserState) (*production[[]U], *ParsingError) {
-		var list []U
-		var afterItemState parserState = *ps
-		var afterSeparatorState parserState = *ps
-		for {
-			prod1, err := c(&afterSeparatorState)
-			if err != nil {
-				return &production[[]U]{
-					state: afterItemState,
-					value: list,
-				}, nil
-			}
-			list = append(list, prod1.value)
-			afterItemState = prod1.state
-			prod2, err := separator(&afterItemState)
-			if err != nil {
-				return &production[[]U]{
-					state: afterItemState,
-					value: list,
-				}, nil
-			}
-			afterSeparatorState = prod2.state
+func (p *Parser) skipWhitespace() {
+	for {
+		p.skipInlineWhitespace()
+		if !p.consumeLineBreak() {
+			return
 		}
 	}
 }
 
-type YamlMap map[string]YamlValue
-type YamlList []string
+func (p *Parser) parseRegex(re *regexp.Regexp) ([]string, *ParsingError) {
+	matches := re.FindStringSubmatch(p.source[p.offset:])
 
-func (m YamlMap) isYamlValue()  {}
-func (m YamlList) isYamlValue() {}
+	if len(matches) == 0 {
+		return nil, p.newError(fmt.Sprintf("failed to match %s", re.String()))
+	}
+	for _, r := range matches[0] {
+		p.advance(r)
+	}
+
+	return matches, nil
+}
+
+// type YamlValue interface {
+// 	isYamlValue()
+// }
+
+// type YamlMapEntry struct {
+// 	key   string
+// 	value YamlValue
+// }
+
+// type YamlMap []YamlMapEntry
+// type YamlList []string
+
+// func (m YamlMap) isYamlValue()  {}
+// func (m YamlList) isYamlValue() {}

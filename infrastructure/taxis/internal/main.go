@@ -7,6 +7,37 @@ import (
 )
 
 func main() {
+	fmt.Println(yaml.ParseYaml(`
+bob:
+ - 1
+fred:
+ - 3
+ - 4
+bob:
+  seiger: 
+   - 1
+   - fdg
+  bobinson:
+roger:
+ - hello`))
+	// 	fmt.Println(yaml.ParseYaml(`
 
-	fmt.Println(yaml.ParseYaml("- tom   \n  \n- dick.j   \n-      harry"))
+	// bob:
+	//  tom:
+	//  - h
+	//  dick:
+	//  - e
+	//  - f
+
+	//  harry:
+	//   charles:
+	//     - 1
+	//     - 2
+	//  creg:
+	//    - 3
+	//    - 4
+
+	// rob:
+	// - a
+	// - b`))
 }

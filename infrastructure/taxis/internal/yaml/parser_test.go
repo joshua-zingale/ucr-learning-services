@@ -6,20 +6,72 @@ import (
 	"testing"
 )
 
-func TestParseYaml(t *testing.T) {
+func TestParseYaml_MapOfStringLists(t *testing.T) {
 	tests := []struct {
 		name      string
 		input     string
-		want      YamlValue
+		want      map[string][]string
 		wantErr   bool
 		errorLine int
 		errorChar int
 	}{
 		{
-			name:    "root list",
-			input:   "- tom \n- dick\n   \n- harry\n    ",
-			want:    YamlList{"tom", "dick", "harry"},
-			wantErr: false,
+			name: "Single key single item list",
+			input: `
+items:
+ - one
+`,
+			want: map[string][]string{
+				"items": {"one"},
+			},
+		},
+		{
+			name: "Single key multi item list",
+			input: `
+items:
+ - one
+ - two
+ - three
+`,
+			want: map[string][]string{
+				"items": {"one", "two", "three"},
+			},
+		},
+		{
+			name: "Multiple keys with lists",
+			input: `
+fruits:
+ - apple
+ - banana
+vegetables:
+ - carrot
+ - onion
+`,
+			want: map[string][]string{
+				"fruits":     {"apple", "banana"},
+				"vegetables": {"carrot", "onion"},
+			},
+		},
+		{
+			name: "Invalid indentation",
+			input: `
+items:
+  - one
+   - b
+`,
+			wantErr:   true,
+			errorLine: 4,
+			errorChar: 4,
+		},
+		{
+			name: "Missing dash in list",
+			input: `
+items:
+ one
+`,
+			wantErr:   true,
+			errorLine: 3,
+			errorChar: 2,
 		},
 	}
 
@@ -39,14 +91,30 @@ func TestParseYaml(t *testing.T) {
 				}
 
 				if line != tt.errorLine || char != tt.errorChar {
-					t.Errorf("expected error at L%d:C%d, got L%d:C%d (Error: %s)",
-						tt.errorLine, tt.errorChar, line, char, err.Error())
+					t.Errorf(
+						"expected error at L%d:C%d, got L%d:C%d (Error: %s)",
+						tt.errorLine, tt.errorChar, line, char, err.Error(),
+					)
 				}
 				return
 			}
 
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("ParseYaml() = %v, want %v", got, tt.want)
+			gotMap, ok := got.(map[string]any)
+			if !ok {
+				t.Fatalf("ParseYaml() returned %T, want map[string][]string", got)
+			}
+
+			normalized := make(map[string][]string)
+			for k, v := range gotMap {
+				list, ok := v.([]string)
+				if !ok {
+					t.Fatalf("value for key %q is %T, want []string", k, v)
+				}
+				normalized[k] = list
+			}
+
+			if !reflect.DeepEqual(normalized, tt.want) {
+				t.Errorf("ParseYaml() = %#v, want %#v", normalized, tt.want)
 			}
 		})
 	}
