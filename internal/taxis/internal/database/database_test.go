@@ -35,6 +35,7 @@ func TestDatabaseFromYaml(t *testing.T) {
 				"charlie@ucr.edu": {"cs100.student"},
 				"tom@ucr.edu":     {"cs100.assistant.ta"},
 				"dick@ucr.edu":    {"cs100.assistant.ula"},
+				"joe@ucr.edu":     {},
 			},
 		},
 	}
@@ -53,15 +54,6 @@ func TestDatabaseFromYaml(t *testing.T) {
 		expectedUsers := make([]string, 0, len(test.userIdToGroups))
 		for k := range test.userIdToGroups {
 			expectedUsers = append(expectedUsers, k)
-		}
-
-		gotUsers := database.GetAllUsersIds()
-
-		if diff := listSetMinus(expectedUsers, gotUsers); len(diff) != 0 {
-			t.Fatalf("missing users %v", diff)
-		}
-		if diff := listSetMinus(gotUsers, expectedUsers); len(diff) != 0 {
-			t.Fatalf("spurious users %v", diff)
 		}
 
 		for userId, expectedGroups := range test.userIdToGroups {

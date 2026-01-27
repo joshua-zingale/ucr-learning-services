@@ -137,6 +137,7 @@ func (p *Parser) parseMap(firstKey string, indentation int) (map[string]any, *Pa
 		if err != nil {
 			return nil, err.addContext("parsing map value")
 		}
+
 		outputMap[key] = value
 
 		lookahead := *p

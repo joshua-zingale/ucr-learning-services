@@ -3,33 +3,48 @@ package database
 import (
 	"fmt"
 	"strings"
+	"sync/atomic"
 
 	"github.com/joshua-zingale/ucr-learning-services/tree/master/infrastructure/taxis/internal/yaml"
 )
 
 const subGroupSeparator = "."
 
+type groupData struct {
+	Mapping map[string][]string
+}
+
 type GroupDB struct {
-	userIdToGroups map[string][]string
+	userIdToGroups atomic.Pointer[groupData]
+}
+
+func GetGroupDBFromYaml(yamlSource string) (*GroupDB, error) {
+	db := GroupDB{}
+	if err := db.LoadGroupsFromYaml(yamlSource); err != nil {
+		return nil, err
+	}
+	return &db, nil
 }
 
 func (gdb *GroupDB) GetGroups(userId string) ([]string, error) {
-	if groups, ok := gdb.userIdToGroups[userId]; ok {
+	if groups, ok := gdb.userIdToGroups.Load().Mapping[userId]; ok {
 		return groups, nil
 	}
 	return []string{}, nil
 }
 
-func (gdb *GroupDB) GetAllUsersIds() []string {
-	keys := make([]string, 0, len(gdb.userIdToGroups))
-	for k := range gdb.userIdToGroups {
-		keys = append(keys, k)
+func (gdb *GroupDB) LoadGroupsFromYaml(yamlSource string) error {
+	newMap, err := getUserIdToGroupsMap(yamlSource)
+	if err != nil {
+		return fmt.Errorf("failed to reload: %w (keeping old data)", err)
 	}
-
-	return keys
+	gdb.userIdToGroups.Store(&groupData{
+		Mapping: newMap,
+	})
+	return nil
 }
 
-func GetGroupDBFromYaml(yamlSource string) (*GroupDB, error) {
+func getUserIdToGroupsMap(yamlSource string) (map[string][]string, error) {
 	data, err := yaml.ParseYaml(yamlSource)
 	if err != nil {
 		return nil, err
@@ -37,11 +52,9 @@ func GetGroupDBFromYaml(yamlSource string) (*GroupDB, error) {
 	if mapping, ok := data.(map[string]any); ok {
 		userIdToGroups, err := invertYamlData(mapping)
 		if err != nil {
-			return nil, fmt.Errorf("invalid YAML: %e", err)
+			return nil, fmt.Errorf("invalid YAML: %w", err)
 		}
-		return &GroupDB{
-			userIdToGroups: userIdToGroups,
-		}, nil
+		return userIdToGroups, nil
 	}
 	return nil, fmt.Errorf("invalid type: found %T but must be a mapping", data)
 }
