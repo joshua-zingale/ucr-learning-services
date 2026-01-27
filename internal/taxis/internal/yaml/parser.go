@@ -165,6 +165,10 @@ func (p *Parser) parseMap(firstKey string, indentation int) (map[string]any, *Pa
 			return nil, err
 		}
 
+		if _, ok := outputMap[nextKey]; ok {
+			return nil, p.newError(fmt.Sprintf("duplicate map key, '%s'", nextKey))
+		}
+
 		key = nextKey
 	}
 

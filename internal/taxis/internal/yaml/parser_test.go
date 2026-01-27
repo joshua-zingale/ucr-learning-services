@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestParseYaml_MapOfStringLists(t *testing.T) {
+func TestParseYaml(t *testing.T) {
 	tests := []struct {
 		name      string
 		input     string
@@ -72,6 +72,21 @@ items:
 			wantErr:   true,
 			errorLine: 3,
 			errorChar: 2,
+		},
+
+		{
+			name: "Repeated map keys",
+			input: `
+fruits:
+ - apple
+ - banana
+fruits:
+ - carrot
+ - onion
+`,
+			wantErr:   true,
+			errorLine: 5,
+			errorChar: 8,
 		},
 	}
 
