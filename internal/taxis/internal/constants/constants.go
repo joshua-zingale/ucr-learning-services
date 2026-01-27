@@ -1,3 +1,3 @@
-package internal
+package constants
 
 var GroupSeparatorInHeader = ","
