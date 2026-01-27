@@ -12,10 +12,13 @@ import (
 
 	"github.com/joshua-zingale/ucr-learning-services/tree/master/infrastructure/taxis/internal/database"
 	"github.com/joshua-zingale/ucr-learning-services/tree/master/infrastructure/taxis/internal/filewatch"
+	"github.com/joshua-zingale/ucr-learning-services/tree/master/infrastructure/taxis/internal/flagset"
 	"github.com/joshua-zingale/ucr-learning-services/tree/master/infrastructure/taxis/internal/web"
 )
 
-const rootCommandName = "taxis"
+const envVarPrefix = "TAXIS_"
+
+var rootCommandName = os.Args[0]
 
 var subCommands = map[string]func(executionContext){
 	"serve": serve,
@@ -31,17 +34,18 @@ func (ec *executionContext) CommandName() string {
 }
 
 func main() {
-
+	flag.Usage = func() {
+		fmt.Fprintln(os.Stderr, "Please specify a sub command:")
+		for subcommand := range subCommands {
+			fmt.Fprintf(os.Stderr, "    - %s\n", subcommand)
+		}
+	}
 	flag.Parse()
 
 	args := flag.Args()
 
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "Please specify a sub command:")
-
-		for subcommand, _ := range subCommands {
-			fmt.Fprintf(os.Stderr, "    - %s\n", subcommand)
-		}
+		flag.Usage()
 		os.Exit(1)
 	}
 
@@ -54,6 +58,7 @@ func main() {
 		})
 	} else {
 		fmt.Fprintf(os.Stderr, "Invalid sub command '%s'\n", cmd)
+		os.Exit(1)
 	}
 
 }
@@ -61,18 +66,19 @@ func main() {
 func serve(execution executionContext) {
 	flag := flag.NewFlagSet(execution.CommandName(), flag.ExitOnError)
 	flag.PrintDefaults()
+	envFlag := flagset.NewEnvironmentDefaultFlagSet(flag, envVarPrefix)
 	var (
-		host             = flag.String("host", "127.0.0.1", "the host at which the web server is broadcast.")
-		port             = flag.String("port", "14812", "the host at which the web server is broadcast.")
-		groupsHeaderName = flag.String("groups-header", "X-Groups", "the header to which the assigned groups will be written.")
-		userIdHeaderName = flag.String("user-id-header", "X-Email", "the header that will be searched for the userId.")
-		watchGroupsFile  = flag.Bool("watch", false, "If specified, the GROUPS_FILE.yml file is watched, so that any update to the file triggers the database to reload.")
+		host             = envFlag.String("host", "127.0.0.1", "the host at which the web server is broadcast.")
+		port             = envFlag.String("port", "14812", "the port on which the web server is broadcast.")
+		groupsHeaderName = envFlag.String("groups-header", "X-Groups", "the header to which the assigned groups will be written.")
+		userIdHeaderName = envFlag.String("user-id-header", "X-Email", "the header that will be searched for the userId.")
+		watchGroupsFile  = envFlag.Bool("watch", false, "If specified, the GROUPS_FILE.yml file is watched, so that any update to the file triggers the database to reload.")
 	)
 	flag.Parse(execution.args)
 
 	args := flag.Args()
 	if len(args) != 1 {
-		fmt.Fprintf(os.Stderr, "Invalid usage: must be\n    %s GROUPS_FILE.yml", execution.CommandName())
+		fmt.Fprintf(os.Stderr, "Invalid usage: must be\n    %s GROUPS_FILE.yml\n", execution.CommandName())
 		os.Exit(1)
 	}
 	groupsFilePath := args[0]
