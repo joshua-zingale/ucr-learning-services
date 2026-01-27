@@ -37,7 +37,7 @@ func GetGroupDBFromYaml(yamlSource string) (*GroupDB, error) {
 	if mapping, ok := data.(map[string]any); ok {
 		userIdToGroups, err := invertYamlData(mapping)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("invalid YAML: %e", err)
 		}
 		return &GroupDB{
 			userIdToGroups: userIdToGroups,
