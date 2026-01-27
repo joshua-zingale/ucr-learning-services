@@ -68,13 +68,19 @@ func serve(execution executionContext) {
 	flag.PrintDefaults()
 	envFlag := flagset.NewEnvironmentDefaultFlagSet(flag, envVarPrefix)
 	var (
-		host             = envFlag.String("host", "127.0.0.1", "the host at which the web server is broadcast.")
-		port             = envFlag.String("port", "14812", "the port on which the web server is broadcast.")
-		groupsHeaderName = envFlag.String("groups-header", "X-Groups", "the header to which the assigned groups will be written.")
-		userIdHeaderName = envFlag.String("user-id-header", "X-Email", "the header that will be searched for the userId.")
-		watchGroupsFile  = envFlag.Bool("watch", false, "If specified, the GROUPS_FILE.yml file is watched, so that any update to the file triggers the database to reload.")
+		host                      = envFlag.String("host", "127.0.0.1", "the host at which the web server is broadcast.")
+		port                      = envFlag.String("port", "14812", "the port on which the web server is broadcast.")
+		groupsHeaderName          = envFlag.String("groups-header", "X-Groups", "the header to which the assigned groups will be written.")
+		userIdHeaderName          = envFlag.String("user-id-header", "X-Email", "the header that will be searched for the userId.")
+		watchGroupsFile           = envFlag.Bool("watch", false, "If specified, the GROUPS_FILE.yml file is watched, so that any update to the file triggers the database to reload.")
+		printEnvironmentVariables = flag.Bool("print-supported-environment-variables", false, "If specified, prints all supported environment variables along with usages.")
 	)
 	flag.Parse(execution.args)
+
+	if *printEnvironmentVariables {
+		envFlag.PrintSupportedEnvironmentVariables()
+		os.Exit(0)
+	}
 
 	args := flag.Args()
 	if len(args) != 1 {
