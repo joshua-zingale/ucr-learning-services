@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/joshua-zingale/ucr-learning-services/tree/master/infrastructure/taxis/internal"
+	"github.com/joshua-zingale/ucr-learning-services/tree/master/infrastructure/taxis/internal/constants"
 )
 
 type GroupDB interface {
@@ -57,7 +57,7 @@ func NewTaxisMux(config *TaxisConfig) (*http.ServeMux, error) {
 		userId, err := getUserIdFromRequest(r, config.UserIdHeaderName)
 		if err != nil {
 			errorMessage := fmt.Sprintf("%s", err.Error())
-			http.Error(w, errorMessage, http.StatusUnauthorized)
+			http.Error(w, errorMessage, http.StatusBadRequest)
 			log.Println(errorMessage)
 		}
 		groups, err := config.Database.GetGroups(userId)
@@ -75,7 +75,7 @@ func NewTaxisMux(config *TaxisConfig) (*http.ServeMux, error) {
 }
 
 func addGroupsToResponseHeader(w http.ResponseWriter, headerName string, groups []string) {
-	w.Header().Set(headerName, strings.Join(groups, internal.GroupSeparatorInHeader))
+	w.Header().Set(headerName, strings.Join(groups, constants.GroupSeparatorInHeader))
 }
 
 func getUserIdFromRequest(r *http.Request, headerName string) (string, error) {
