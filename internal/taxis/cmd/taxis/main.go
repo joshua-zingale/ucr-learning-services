@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/joshua-zingale/ucr-learning-services/tree/master/infrastructure/taxis/internal/database"
-	"github.com/joshua-zingale/ucr-learning-services/tree/master/infrastructure/taxis/internal/filewatch"
-	"github.com/joshua-zingale/ucr-learning-services/tree/master/infrastructure/taxis/internal/flagset"
-	"github.com/joshua-zingale/ucr-learning-services/tree/master/infrastructure/taxis/internal/web"
+	"github.com/joshua-zingale/ucr-learning-services/internal/taxis/internal/database"
+	"github.com/joshua-zingale/ucr-learning-services/internal/taxis/internal/filewatch"
+	"github.com/joshua-zingale/ucr-learning-services/internal/taxis/internal/flagset"
+	"github.com/joshua-zingale/ucr-learning-services/internal/taxis/internal/web"
 )
 
 const envVarPrefix = "TAXIS_"

@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/joshua-zingale/ucr-learning-services/tree/master/infrastructure/taxis/internal/constants"
+	"github.com/joshua-zingale/ucr-learning-services/internal/taxis/internal/constants"
 )
 
 type GroupDB interface {

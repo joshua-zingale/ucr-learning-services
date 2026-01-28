@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/joshua-zingale/ucr-learning-services/tree/master/infrastructure/taxis/internal/database"
-	"github.com/joshua-zingale/ucr-learning-services/tree/master/infrastructure/taxis/internal/web"
+	"github.com/joshua-zingale/ucr-learning-services/internal/taxis/internal/database"
+	"github.com/joshua-zingale/ucr-learning-services/internal/taxis/internal/web"
 )
 
 // Helper to find items in l1 that are not in l2

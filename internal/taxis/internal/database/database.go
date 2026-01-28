@@ -5,7 +5,7 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/joshua-zingale/ucr-learning-services/tree/master/infrastructure/taxis/internal/yaml"
+	"github.com/joshua-zingale/ucr-learning-services/internal/taxis/internal/yaml"
 )
 
 const subGroupSeparator = "."
