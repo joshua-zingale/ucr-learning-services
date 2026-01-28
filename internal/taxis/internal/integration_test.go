@@ -1,9 +1,9 @@
 package internal
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/joshua-zingale/ucr-learning-services/internal/taxis/internal/database"
@@ -43,7 +43,6 @@ cs100:
 
 	config := &web.TaxisConfig{
 		Database:         db,
-		GroupsHeaderName: "X-Assigned-Groups",
 		UserIdHeaderName: "X-User-ID",
 		RootPath:         "/taxis",
 	}
@@ -92,7 +91,7 @@ cs100:
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest("GET", "/taxis/auth", nil)
+			req := httptest.NewRequest("GET", "/taxis/userinfo", nil)
 			req.Header.Set(tt.requestHeader, tt.userIdValue)
 
 			rr := httptest.NewRecorder()
@@ -103,17 +102,20 @@ cs100:
 			}
 
 			if tt.expectedStatus == http.StatusOK {
-				headerVal := rr.Header().Get(config.GroupsHeaderName)
-				var actualGroups []string
-				if headerVal != "" {
-					actualGroups = strings.Split(headerVal, ",")
+				groups := struct {
+					Groups []string `json:"groups"`
+				}{}
+				if err := json.NewDecoder(rr.Body).Decode(&groups); err != nil {
+					t.Errorf("Could not decode response as json data: %s", err.Error())
 				}
 
-				if missing := listSetMinus(tt.expectedGroups, actualGroups); len(missing) > 0 {
+				foundGroups := groups.Groups
+
+				if missing := listSetMinus(tt.expectedGroups, foundGroups); len(missing) > 0 {
 					t.Errorf("Missing roles: %v", missing)
 				}
 
-				if extra := listSetMinus(actualGroups, tt.expectedGroups); len(extra) > 0 {
+				if extra := listSetMinus(foundGroups, tt.expectedGroups); len(extra) > 0 {
 					t.Errorf("Superfluous roles: %v", extra)
 				}
 			}
