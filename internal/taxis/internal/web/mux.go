@@ -23,6 +23,9 @@ type TaxisConfig struct {
 
 	// The name of the header from which the userId is read
 	UserIdHeaderName string
+
+	// The root URI path. e.g. "/taxis"
+	RootPath string
 }
 
 func setDefaultsAndValidate(config *TaxisConfig) error {
@@ -37,6 +40,8 @@ func setDefaultsAndValidate(config *TaxisConfig) error {
 	if len(config.UserIdHeaderName) == 0 {
 		return cannotBeNilError("UserIdHeaderName")
 	}
+
+	config.RootPath = strings.TrimSuffix(config.RootPath, "/")
 
 	return nil
 }
@@ -53,7 +58,7 @@ func NewTaxisMux(config *TaxisConfig) (*http.ServeMux, error) {
 
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("/assign", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc(fmt.Sprintf("%s/auth", config.RootPath), func(w http.ResponseWriter, r *http.Request) {
 		userId, err := getUserIdFromRequest(r, config.UserIdHeaderName)
 		if err != nil {
 			errorMessage := fmt.Sprintf("%s", err.Error())

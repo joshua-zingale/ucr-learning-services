@@ -45,6 +45,7 @@ cs100:
 		Database:         db,
 		GroupsHeaderName: "X-Assigned-Groups",
 		UserIdHeaderName: "X-User-ID",
+		RootPath:         "/taxis",
 	}
 
 	mux, err := web.NewTaxisMux(config)
@@ -91,7 +92,7 @@ cs100:
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest("GET", "/assign", nil)
+			req := httptest.NewRequest("GET", "/taxis/auth", nil)
 			req.Header.Set(tt.requestHeader, tt.userIdValue)
 
 			rr := httptest.NewRecorder()

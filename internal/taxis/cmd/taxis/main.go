@@ -70,6 +70,7 @@ func serve(execution executionContext) {
 	var (
 		host                      = envFlag.String("host", "127.0.0.1", "the host at which the web server is broadcast.")
 		port                      = envFlag.String("port", "14812", "the port on which the web server is broadcast.")
+		rootPath                  = envFlag.String("root-path", "/taxis", "the root URI path for this web server.")
 		groupsHeaderName          = envFlag.String("groups-header", "X-Groups", "the header to which the assigned groups will be written.")
 		userIdHeaderName          = envFlag.String("user-id-header", "X-Email", "the header that will be searched for the userId.")
 		watchGroupsFile           = envFlag.Bool("watch", false, "If specified, the GROUPS_FILE.yml file is watched, so that any update to the file triggers the database to reload.")
@@ -103,6 +104,7 @@ func serve(execution executionContext) {
 		Database:         db,
 		GroupsHeaderName: *groupsHeaderName,
 		UserIdHeaderName: *userIdHeaderName,
+		RootPath:         *rootPath,
 	})
 	if err != nil {
 		log.Fatalf("Invalid config: %s", err.Error())

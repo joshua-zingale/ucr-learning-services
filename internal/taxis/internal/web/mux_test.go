@@ -17,7 +17,7 @@ func (m *MockGroupDB) GetGroups(userId string) ([]string, error) {
 	return []string{}, nil
 }
 
-func TestTaxisMux_Assign(t *testing.T) {
+func TestTaxisMux_Auth(t *testing.T) {
 
 	db := &MockGroupDB{
 		mapping: map[string][]string{
@@ -75,7 +75,7 @@ func TestTaxisMux_Assign(t *testing.T) {
 				t.Fatalf("NewTaxisMux failed: %v", err)
 			}
 
-			req := httptest.NewRequest("GET", "/assign", nil)
+			req := httptest.NewRequest("GET", "/auth", nil)
 			req.Header.Set(tt.requestHeaderKey, tt.requestHeaderVal)
 
 			rr := httptest.NewRecorder()
