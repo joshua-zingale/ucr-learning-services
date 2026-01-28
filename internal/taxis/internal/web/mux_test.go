@@ -1,10 +1,8 @@
 package web
 
 import (
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 )
 
@@ -68,6 +66,7 @@ func TestTaxisMux_Auth(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			config := &TaxisConfig{
 				Database:         db,
+				GroupsHeaderName: "X-Assigned-Groups",
 				UserIdHeaderName: "X-User-ID",
 			}
 
@@ -76,7 +75,7 @@ func TestTaxisMux_Auth(t *testing.T) {
 				t.Fatalf("NewTaxisMux failed: %v", err)
 			}
 
-			req := httptest.NewRequest("GET", "/userinfo", nil)
+			req := httptest.NewRequest("GET", "/auth", nil)
 			req.Header.Set(tt.requestHeaderKey, tt.requestHeaderVal)
 
 			rr := httptest.NewRecorder()
@@ -90,15 +89,8 @@ func TestTaxisMux_Auth(t *testing.T) {
 
 			// Validate Header Content (only on 200 OK)
 			if tt.expectedStatus == http.StatusOK {
-				groups := struct {
-					Groups []string `json:"groups"`
-				}{}
-				if err := json.NewDecoder(rr.Body).Decode(&groups); err != nil {
-					t.Errorf("Could not decode response as json data: %s", err.Error())
-				}
-
-				got := groups.Groups
-				if strings.Join(got, ",") != tt.expectedGroups {
+				got := rr.Header().Get(config.GroupsHeaderName)
+				if got != tt.expectedGroups {
 					t.Errorf("handler returned unexpected groups: got %v want %v",
 						got, tt.expectedGroups)
 				}

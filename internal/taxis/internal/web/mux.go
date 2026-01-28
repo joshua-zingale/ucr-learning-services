@@ -1,11 +1,12 @@
 package web
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"strings"
+
+	"github.com/joshua-zingale/ucr-learning-services/internal/taxis/internal/constants"
 )
 
 type GroupDB interface {
@@ -17,16 +18,23 @@ type TaxisConfig struct {
 	// The database used to determine those groups to which a user belongs
 	Database GroupDB
 
+	// The name of the header to which the groups are written
+	GroupsHeaderName string
+
 	// The name of the header from which the userId is read
 	UserIdHeaderName string
 
-	// The root URI path. e.g. "/taxis" or "/"
+	// The root URI path. e.g. "/taxis"
 	RootPath string
 }
 
 func setDefaultsAndValidate(config *TaxisConfig) error {
 	if config.Database == nil {
 		return cannotBeNilError("Database")
+	}
+
+	if len(config.GroupsHeaderName) == 0 {
+		return cannotBeNilError("GroupHeaderName")
 	}
 
 	if len(config.UserIdHeaderName) == 0 {
@@ -50,7 +58,7 @@ func NewTaxisMux(config *TaxisConfig) (*http.ServeMux, error) {
 
 	mux := http.NewServeMux()
 
-	mux.HandleFunc(fmt.Sprintf("%s/userinfo", config.RootPath), func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc(fmt.Sprintf("%s/auth", config.RootPath), func(w http.ResponseWriter, r *http.Request) {
 		userId, err := getUserIdFromRequest(r, config.UserIdHeaderName)
 		if err != nil {
 			errorMessage := fmt.Sprintf("%s", err.Error())
@@ -64,21 +72,15 @@ func NewTaxisMux(config *TaxisConfig) (*http.ServeMux, error) {
 			log.Println(errorMessage)
 			return
 		}
-		addGroupsToResponse(w, groups)
+		w.Header().Set(config.UserIdHeaderName, userId)
+		addGroupsToResponseHeader(w, config.GroupsHeaderName, groups)
 	})
 
 	return mux, nil
 }
 
-func addGroupsToResponse(w http.ResponseWriter, groups []string) {
-	w.Header().Set("Content-Type", "application/json")
-	encoder := json.NewEncoder(w)
-
-	encoder.Encode(struct {
-		Groups []string `json:"groups"`
-	}{
-		Groups: groups,
-	})
+func addGroupsToResponseHeader(w http.ResponseWriter, headerName string, groups []string) {
+	w.Header().Set(headerName, strings.Join(groups, constants.GroupSeparatorInHeader))
 }
 
 func getUserIdFromRequest(r *http.Request, headerName string) (string, error) {
