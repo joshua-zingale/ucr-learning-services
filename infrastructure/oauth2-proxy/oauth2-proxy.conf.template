@@ -18,4 +18,4 @@ whitelist_domains = [
     ".${EXTERNAL_HOST}:${EXTERNAL_PORT}"
 ]
 
-show_debug_on_error = true
+show_debug_on_error = false
