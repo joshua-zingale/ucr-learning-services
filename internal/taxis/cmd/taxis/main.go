@@ -84,7 +84,7 @@ func serve(execution executionContext) {
 
 	args := flag.Args()
 	if len(args) != 1 {
-		fmt.Fprintf(os.Stderr, "Invalid usage: must be\n    %s GROUPS_FILE.yml\n", execution.CommandName())
+		fmt.Fprintf(os.Stderr, "Invalid usage: must be\n    %s [-flag [value]...] GROUPS_FILE.yml\n", execution.CommandName())
 		os.Exit(1)
 	}
 	groupsFilePath := args[0]
