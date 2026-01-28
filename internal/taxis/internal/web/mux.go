@@ -67,7 +67,7 @@ func NewTaxisMux(config *TaxisConfig) (*http.ServeMux, error) {
 			log.Println(errorMessage)
 			return
 		}
-
+		w.Header().Set(config.UserIdHeaderName, userId)
 		addGroupsToResponseHeader(w, config.GroupsHeaderName, groups)
 	})
 
