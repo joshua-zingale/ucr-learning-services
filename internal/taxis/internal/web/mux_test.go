@@ -1,6 +1,7 @@
 package web
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -15,6 +16,16 @@ func (m *MockGroupDB) GetGroups(userId string) ([]string, error) {
 		return groups, nil
 	}
 	return []string{}, nil
+}
+
+type inputHeaderAuthenticator struct{}
+
+func (iha inputHeaderAuthenticator) Authenticate(r *http.Request) (string, error) {
+	userId := r.Header.Get("X-User-ID")
+	if len(userId) == 0 {
+		return "", fmt.Errorf("missing header value: %s", "X-User-ID")
+	}
+	return userId, nil
 }
 
 func TestTaxisMux_Auth(t *testing.T) {
@@ -67,7 +78,7 @@ func TestTaxisMux_Auth(t *testing.T) {
 			config := &TaxisConfig{
 				Database:         db,
 				GroupsHeaderName: "X-Assigned-Groups",
-				UserIdHeaderName: "X-User-ID",
+				Authenticator:    inputHeaderAuthenticator{},
 			}
 
 			mux, err := NewTaxisMux(config)

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -72,7 +73,9 @@ func serve(execution executionContext) {
 		port                      = envFlag.String("port", "14812", "the port on which the web server is broadcast.")
 		rootPath                  = envFlag.String("root-path", "/taxis", "the root URI path for this web server.")
 		groupsHeaderName          = envFlag.String("groups-header", "X-Groups", "the header to which the assigned groups will be written.")
-		userIdHeaderName          = envFlag.String("user-id-header", "X-Email", "the header that will be searched for the userId.")
+		userIdHeaderName          = envFlag.String("user-id-header", "X-Email", "the header to which the user ID will be written.")
+		proxyUserIdHeaderName     = envFlag.String("proxy-user-id-header", "X-Email", "the header to which the authentication proxy writes the user ID.")
+		authProxyUrlSting         = envFlag.String("auth-proxy-url", "", "the url of the authentication proxy.")
 		watchGroupsFile           = envFlag.Bool("watch", false, "If specified, the GROUPS_FILE.yml file is watched, so that any update to the file triggers the database to reload.")
 		printEnvironmentVariables = flag.Bool("print-supported-environment-variables", false, "If specified, prints all supported environment variables along with usages.")
 	)
@@ -90,9 +93,14 @@ func serve(execution executionContext) {
 	}
 	groupsFilePath := args[0]
 
+	authProxyUrl, err := url.Parse(*authProxyUrlSting)
+	if err != nil {
+		log.Fatalf("Invalid URL for auth proxy: %s", err.Error())
+	}
+
 	yamlSource, err := os.ReadFile(groupsFilePath)
 	if err != nil {
-		log.Fatalf("Error: Could not %s\n", err.Error())
+		log.Fatalf("Error: could not %s\n", err.Error())
 	}
 
 	db, err := database.GetGroupDBFromYaml(string(yamlSource))
@@ -101,6 +109,10 @@ func serve(execution executionContext) {
 	}
 
 	mux, err := web.NewTaxisMux(&web.TaxisConfig{
+		Authenticator: &web.ProxyAuthenticator{
+			UserIdHeaderName:  *proxyUserIdHeaderName,
+			AuthenticationURL: authProxyUrl,
+		},
 		Database:         db,
 		GroupsHeaderName: *groupsHeaderName,
 		UserIdHeaderName: *userIdHeaderName,
