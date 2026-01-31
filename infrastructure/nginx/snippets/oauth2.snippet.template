@@ -5,8 +5,10 @@ location /oauth2/ {
   proxy_set_header  X-Auth-Request-Redirect $request_uri;
 }
 
-location = /oauth2/auth {
-  proxy_pass       http://oauth2-proxy:4180;
+location = /taxis/auth {
+  internal;
+
+  proxy_pass       http://taxis:14812;
   proxy_set_header Host             $host;
   proxy_set_header X-Real-IP        $remote_addr;
   proxy_set_header X-Forwarded-Uri  $request_uri;

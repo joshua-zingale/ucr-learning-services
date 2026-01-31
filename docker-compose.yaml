@@ -17,7 +17,7 @@ services:
     build:
       context: ./infrastructure/oauth2-proxy
     volumes:
-      - ./infrastructure/oauth2-proxy/oauth2-proxy.conf.template:/root/oauth2-proxy.conf.template
+      - ./infrastructure/oauth2-proxy/oauth2-proxy.conf.template:/root/oauth2-proxy.conf.template:ro
     
     environment:
       - EXTERNAL_HOST=${EXTERNAL_HOST}
@@ -25,6 +25,13 @@ services:
       - OAUTH2_PROXY_COOKIE_SECRET=${OAUTH2_PROXY_COOKIE_SECRET}
       - OAUTH2_PROXY_CLIENT_SECRET=${OAUTH2_PROXY_CLIENT_SECRET}
       - OAUTH2_PROXY_CLIENT_ID=${OAUTH2_PROXY_CLIENT_ID}
+
+  taxis:
+    build:
+      context: ./internal/taxis
+    volumes:
+    - ./infrastructure/taxis/taxis.conf:/app/taxis.conf:ro
+    - ./groups.yml:/app/groups.yml:ro
 
   demo:
     build:

@@ -1,1 +1,1 @@
-oauth2-proxy|The authentication proxy
+taxis|The middleware that adds group headers to an authenticated user

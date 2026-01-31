@@ -1,0 +1,8 @@
+TAXIS_HOST|str|the host at which the web server is broadcast.
+TAXIS_PORT|str|the port on which the web server is broadcast.
+TAXIS_ROOT_PATH|str|the root URI path for this web server.
+TAXIS_GROUPS_HEADER|str|the header to which the assigned groups will be written.
+TAXIS_USER_ID_HEADER|str|the header to which the user ID will be written.
+TAXIS_AUTH_PROXY_USER_ID_HEADER|str|the header to which the authentication proxy writes the user ID.
+TAXIS_AUTH_PROXY_URL|str|the url of the authentication proxy.
+TAXIS_WATCH|str|'true', 't', 'yes', and 'y' set and all else unsets. If specified, the GROUPS_FILE.yml file is watched, so that any update to the file triggers the database to reload.

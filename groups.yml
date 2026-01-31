@@ -1,0 +1,11 @@
+cs100:
+  instructor:
+    - bob@ucr.edu
+  ta:
+    - jzing002@ucr.edu
+  student:
+    - fred@ucr.edu
+
+cs302:
+  student:
+    - jzing002@ucr.edu

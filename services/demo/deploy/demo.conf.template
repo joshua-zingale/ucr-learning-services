@@ -8,17 +8,19 @@ server {
     proxy_pass http://demo:8000/;
   }
 
-  location /demo-with-auth {
-    auth_request /oauth2/auth;
+  location /with-auth {
+    auth_request /taxis/auth;
     error_page 401 = @sign_in;
 
-    auth_request_set $user  $upstream_http_x_auth_request_user;
-    auth_request_set $email  $upstream_http_x_auth_request_email;
-    proxy_set_header X-User $user;
+    auth_request_set $email  $upstream_http_x_email;
+    auth_request_set $groups  $upstream_http_x_groups;
+
     proxy_set_header X-Email $email;
+    proxy_set_header X-Groups $groups;
     
-    sub_filter '@NetID' $email;
     sub_filter '@email' $email;
+    sub_filter '@groups' $groups;
+
 
     proxy_pass http://demo:8000/;
   }

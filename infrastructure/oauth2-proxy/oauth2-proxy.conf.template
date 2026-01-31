@@ -15,7 +15,8 @@ cookie_samesite = "lax"
 cookie_secure = false
 
 whitelist_domains = [
-    ".${EXTERNAL_HOST}:${EXTERNAL_PORT}"
+    ".${EXTERNAL_HOST}:${EXTERNAL_PORT}",
+    "oauth2-proxy:14812"
 ]
 
 show_debug_on_error = false
