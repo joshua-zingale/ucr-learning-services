@@ -98,9 +98,15 @@ func serve(execution executionContext) {
 		printEnvironmentVariables = flag.Bool("print-supported-environment-variables", false, "If specified, prints all supported environment variables along with usages.")
 		_                         = flag.String("config", "", "the config file that set arguments for taxis")
 	)
+
 	if err := envFlag.Parse(argsWithoutConfig); err != nil {
 		log.Fatal(err.Error())
 	}
+
+	log.Printf("URL received %s: ...", *authProxyUrlSting)
+	log.Printf("Groups header name %s: ...", *groupsHeaderName)
+	log.Printf("Groups host  %s: ...", *host)
+	log.Printf("rootPath host  %s: ...", *rootPath)
 
 	if *printEnvironmentVariables {
 		envFlag.PrintSupportedEnvironmentVariables()

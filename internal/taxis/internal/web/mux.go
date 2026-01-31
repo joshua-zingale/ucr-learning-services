@@ -52,8 +52,10 @@ func (t *Taxis) handleAuth(w http.ResponseWriter, r *http.Request) {
 		log.Println(errorMessage)
 		return
 	}
+
 	w.Header().Set(t.config.UserIdHeaderName, userId)
 	w.Header().Set(t.config.GroupsHeaderName, strings.Join(groups, constants.GroupSeparatorInHeader))
+	w.WriteHeader(http.StatusAccepted)
 }
 
 func NewTaxisMux(config *TaxisConfig) (*http.ServeMux, error) {

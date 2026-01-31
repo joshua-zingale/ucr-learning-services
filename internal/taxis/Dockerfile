@@ -30,6 +30,6 @@ EXPOSE 14812
 
 VOLUME /app/groups.yml
 
-CMD [ "taxis", "serve", "--config", "/app/config.conf", "--host", "0.0.0.0", "--port", "14812", "/app/groups.yml" ]
+CMD [ "taxis", "serve", "--config", "/app/taxis.conf", "--host", "0.0.0.0", "--port", "14812", "/app/groups.yml" ]
 
 

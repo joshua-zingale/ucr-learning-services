@@ -70,7 +70,7 @@ func (edf *EnvironmentDefaultFlagSet) Parse(args []string) error {
 		flagNames[f.Name] = struct{}{}
 	})
 	for configName := range edf.config {
-		if _, ok := flagNames[configName]; !ok {
+		if _, ok := flagNames[configNameToParamName(configName)]; !ok {
 			return fmt.Errorf("unknown key in config: %s", configName)
 		}
 	}
@@ -113,6 +113,10 @@ func configNameToParamName(s string) string {
 	return strings.Replace(s, "_", "-", -1)
 }
 
+func paramNameToConfigName(s string) string {
+	return strings.Replace(s, "-", "_", -1)
+}
+
 func parseConfigContent(content string) (map[string]string, error) {
 	config := make(map[string]string)
 	scanner := bufio.NewScanner(strings.NewReader(content))
@@ -130,14 +134,14 @@ func parseConfigContent(content string) (map[string]string, error) {
 			if strings.Contains(key, " ") {
 				return nil, fmt.Errorf("invalid key '%s': must not contain white space", key)
 			}
-			config[configNameToParamName(key)] = val
+			config[key] = val
 		}
 	}
 	return config, scanner.Err()
 }
 
 func resolveDefault[T any](edf *EnvironmentDefaultFlagSet, name string, fallback T, conversion func(string) T) T {
-	if value, ok := edf.config[name]; ok {
+	if value, ok := edf.config[paramNameToConfigName(name)]; ok {
 		return conversion(value)
 	}
 	if envVarValue := os.Getenv(edf.paramNameToEnvironName(name)); envVarValue != "" {
