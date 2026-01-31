@@ -67,31 +67,52 @@ func main() {
 func serve(execution executionContext) {
 	flag := flag.NewFlagSet(execution.CommandName(), flag.ExitOnError)
 	flag.PrintDefaults()
-	envFlag := flagset.NewEnvironmentDefaultFlagSet(flag, envVarPrefix)
+
+	configFilePath, argsWithoutConfig, err := flagset.ParseConfigArgument(execution.args)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+
+	configContent := []byte("")
+	if configFilePath != "" {
+		configContent, err = os.ReadFile(configFilePath)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	envFlag, err := flagset.NewEnvironmentDefaultFlagSet(flag, envVarPrefix, string(configContent))
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+
 	var (
 		host                      = envFlag.String("host", "127.0.0.1", "the host at which the web server is broadcast.")
 		port                      = envFlag.String("port", "14812", "the port on which the web server is broadcast.")
 		rootPath                  = envFlag.String("root-path", "/taxis", "the root URI path for this web server.")
 		groupsHeaderName          = envFlag.String("groups-header", "X-Groups", "the header to which the assigned groups will be written.")
 		userIdHeaderName          = envFlag.String("user-id-header", "X-Email", "the header to which the user ID will be written.")
-		proxyUserIdHeaderName     = envFlag.String("proxy-user-id-header", "X-Email", "the header to which the authentication proxy writes the user ID.")
+		proxyUserIdHeaderName     = envFlag.String("auth-proxy-user-id-header", "X-Email", "the header to which the authentication proxy writes the user ID.")
 		authProxyUrlSting         = envFlag.String("auth-proxy-url", "", "the url of the authentication proxy.")
 		watchGroupsFile           = envFlag.Bool("watch", false, "If specified, the GROUPS_FILE.yml file is watched, so that any update to the file triggers the database to reload.")
 		printEnvironmentVariables = flag.Bool("print-supported-environment-variables", false, "If specified, prints all supported environment variables along with usages.")
+		_                         = flag.String("config", "", "the config file that set arguments for taxis")
 	)
-	flag.Parse(execution.args)
+	if err := envFlag.Parse(argsWithoutConfig); err != nil {
+		log.Fatal(err.Error())
+	}
 
 	if *printEnvironmentVariables {
 		envFlag.PrintSupportedEnvironmentVariables()
 		os.Exit(0)
 	}
 
-	args := flag.Args()
-	if len(args) != 1 {
+	positionalArgs := flag.Args()
+	if len(positionalArgs) != 1 {
 		fmt.Fprintf(os.Stderr, "Invalid usage: must be\n    %s [-flag [value]...] GROUPS_FILE.yml\n", execution.CommandName())
 		os.Exit(1)
 	}
-	groupsFilePath := args[0]
+	groupsFilePath := positionalArgs[0]
 
 	authProxyUrl, err := url.Parse(*authProxyUrlSting)
 	if err != nil {
