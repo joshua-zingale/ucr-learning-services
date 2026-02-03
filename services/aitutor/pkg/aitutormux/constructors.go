@@ -8,7 +8,7 @@ import (
 )
 
 func NewAgentId(rid restapi.ResourceId) (*AgentId, error) {
-	agentIdString, ok := rid["agent"]
+	agentIdString, ok := rid[restapi.GetResourcePathVariableName(AGENT_RESOURCE)]
 	if !ok {
 		return nil, fmt.Errorf("missing agent id")
 	}

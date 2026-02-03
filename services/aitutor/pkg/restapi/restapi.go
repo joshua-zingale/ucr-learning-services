@@ -18,6 +18,10 @@ type Resource interface {
 	Parent() Resource
 }
 
+func GetResourcePathVariableName(r Resource) string {
+	return fmt.Sprintf("%sId", r.Name())
+}
+
 type ResourceContext struct {
 	ResourceId ResourceId
 }
@@ -26,7 +30,7 @@ func GetResourceIdRaw(req *http.Request, res Resource) ResourceId {
 	resourceId := make(ResourceId)
 	curr := res
 	for curr != nil {
-		name := curr.Name()
+		name := GetResourcePathVariableName(curr)
 		if value := req.PathValue(name); value != "" {
 			resourceId[name] = value
 		}
@@ -56,14 +60,14 @@ func HandleResourceCollection(mux *http.ServeMux, method string, resource Resour
 }
 
 func buildResourcePath(r Resource) string {
-	path := fmt.Sprintf("%s/{%s}", buildCollectionPath(r), r.Name())
+	path := fmt.Sprintf("%s/{%s}", buildCollectionPath(r), GetResourcePathVariableName(r))
 	return path
 }
 
 func buildCollectionPath(r Resource) string {
 	path := "/" + r.PluralName()
 	if r.Parent() != nil {
-		path = fmt.Sprintf("%s/{%s}%s", buildCollectionPath(r.Parent()), r.Parent().Name(), path)
+		path = fmt.Sprintf("%s/{%s}%s", buildCollectionPath(r.Parent()), GetResourcePathVariableName(r.Parent()), path)
 	}
 	return path
 }

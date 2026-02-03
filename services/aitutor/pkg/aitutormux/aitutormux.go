@@ -2,7 +2,7 @@ package aitutormux
 
 import (
 	"encoding/json"
-	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/joshua-zingale/ucr-learning-services/services/aitutor/pkg/restapi"
@@ -32,9 +32,10 @@ func NewAiTutorMux(config *AiTutorConfig) http.Handler {
 			return
 		}
 
-		agentId, err := rc.ResourceId.GetInt("agent")
+		agentId, err := rc.ResourceId.GetInt(restapi.GetResourcePathVariableName(AGENT_RESOURCE))
 		if err != nil {
-			http.Error(w, fmt.Sprintf("%s", err.Error()), http.StatusBadRequest)
+			http.Error(w, "Bad Request", http.StatusBadRequest)
+			log.Print(err.Error())
 			return
 		}
 
@@ -42,7 +43,9 @@ func NewAiTutorMux(config *AiTutorConfig) http.Handler {
 			AgentId: agentId,
 		})
 		if err != nil {
-			http.Error(w, fmt.Sprintf("Not Found: %s", err.Error()), http.StatusNotFound)
+			http.Error(w, "Not Found", http.StatusNotFound)
+			log.Print(err.Error())
+			return
 		}
 
 		enc := json.NewEncoder(w)
