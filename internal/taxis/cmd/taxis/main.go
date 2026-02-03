@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/joshua-zingale/ucr-learning-services/internal/confenvflag/pkg/confenvflag"
 	"github.com/joshua-zingale/ucr-learning-services/internal/taxis/internal/database"
 	"github.com/joshua-zingale/ucr-learning-services/internal/taxis/internal/filewatch"
-	"github.com/joshua-zingale/ucr-learning-services/internal/taxis/internal/flagset"
 	"github.com/joshua-zingale/ucr-learning-services/internal/taxis/internal/web"
 )
 
@@ -68,7 +68,7 @@ func serve(execution executionContext) {
 	flag := flag.NewFlagSet(execution.CommandName(), flag.ExitOnError)
 	flag.PrintDefaults()
 
-	configFilePath, argsWithoutConfig, err := flagset.ParseConfigArgument(execution.args)
+	configFilePath, argsWithoutConfig, err := confenvflag.ParseConfigArgument(execution.args)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
@@ -81,7 +81,7 @@ func serve(execution executionContext) {
 		}
 	}
 
-	envFlag, err := flagset.NewEnvConfigFlagSet(flag, envVarPrefix, string(configContent))
+	envFlag, err := confenvflag.NewConfEnvFlagSet(flag, envVarPrefix, string(configContent))
 	if err != nil {
 		log.Fatal(err.Error())
 	}
