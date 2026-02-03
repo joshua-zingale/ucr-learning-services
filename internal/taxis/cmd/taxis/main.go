@@ -81,7 +81,7 @@ func serve(execution executionContext) {
 		}
 	}
 
-	envFlag, err := flagset.NewEnvironmentDefaultFlagSet(flag, envVarPrefix, string(configContent))
+	envFlag, err := flagset.NewEnvConfigFlagSet(flag, envVarPrefix, string(configContent))
 	if err != nil {
 		log.Fatal(err.Error())
 	}

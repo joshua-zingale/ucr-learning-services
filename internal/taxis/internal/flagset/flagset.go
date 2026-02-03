@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-type EnvironmentDefaultFlagSet struct {
+type EnvConfigFlagSet struct {
 	flagSet      *flag.FlagSet
 	envVarPrefix string
 
@@ -22,12 +22,12 @@ type EnvironmentVariable struct {
 	usage string
 }
 
-func NewEnvironmentDefaultFlagSet(flagSet *flag.FlagSet, envVarPrefix string, configContent string) (*EnvironmentDefaultFlagSet, error) {
+func NewEnvConfigFlagSet(flagSet *flag.FlagSet, envVarPrefix string, configContent string) (*EnvConfigFlagSet, error) {
 	config, err := parseConfigContent(configContent)
 	if err != nil {
 		return nil, err
 	}
-	return &EnvironmentDefaultFlagSet{
+	return &EnvConfigFlagSet{
 		flagSet:      flagSet,
 		envVarPrefix: envVarPrefix,
 		config:       config,
@@ -64,7 +64,7 @@ func ParseConfigArgument(args []string) (string, []string, error) {
 	return args[configIdx+1], newArgs, nil
 }
 
-func (edf *EnvironmentDefaultFlagSet) Parse(args []string) error {
+func (edf *EnvConfigFlagSet) Parse(args []string) error {
 	flagNames := make(map[string]struct{})
 	edf.flagSet.VisitAll(func(f *flag.Flag) {
 		flagNames[f.Name] = struct{}{}
@@ -78,12 +78,12 @@ func (edf *EnvironmentDefaultFlagSet) Parse(args []string) error {
 	return edf.flagSet.Parse(args)
 }
 
-func (edf *EnvironmentDefaultFlagSet) String(name string, value string, usage string) *string {
+func (edf *EnvConfigFlagSet) String(name string, value string, usage string) *string {
 	edf.envVars = append(edf.envVars, EnvironmentVariable{name: edf.paramNameToEnvironName(name), type_: "str", usage: usage})
 	return edf.flagSet.String(name, resolveDefault(edf, name, value, func(s string) string { return s }), usage)
 }
 
-func (edf *EnvironmentDefaultFlagSet) Bool(name string, value bool, usage string) *bool {
+func (edf *EnvConfigFlagSet) Bool(name string, value bool, usage string) *bool {
 
 	edf.envVars = append(edf.envVars, EnvironmentVariable{name: edf.paramNameToEnvironName(name), type_: "str", usage: fmt.Sprintf("'true', 't', 'yes', and 'y' set and all else unsets. %s", usage)})
 	return edf.flagSet.Bool(name, resolveDefault(edf, name, value, func(s string) bool {
@@ -96,13 +96,13 @@ func (edf *EnvironmentDefaultFlagSet) Bool(name string, value bool, usage string
 	}), usage)
 }
 
-func (edf *EnvironmentDefaultFlagSet) PrintSupportedEnvironmentVariables() {
+func (edf *EnvConfigFlagSet) PrintSupportedEnvironmentVariables() {
 	for _, envVar := range edf.envVars {
 		fmt.Printf("%s|%s|%s\n", envVar.name, envVar.type_, envVar.usage)
 	}
 }
 
-func (edf *EnvironmentDefaultFlagSet) paramNameToEnvironName(s string) string {
+func (edf *EnvConfigFlagSet) paramNameToEnvironName(s string) string {
 	s = strings.Replace(s, "-", "_", -1)
 	s = strings.ToUpper(s)
 
@@ -140,7 +140,7 @@ func parseConfigContent(content string) (map[string]string, error) {
 	return config, scanner.Err()
 }
 
-func resolveDefault[T any](edf *EnvironmentDefaultFlagSet, name string, fallback T, conversion func(string) T) T {
+func resolveDefault[T any](edf *EnvConfigFlagSet, name string, fallback T, conversion func(string) T) T {
 	if value, ok := edf.config[paramNameToConfigName(name)]; ok {
 		return conversion(value)
 	}
