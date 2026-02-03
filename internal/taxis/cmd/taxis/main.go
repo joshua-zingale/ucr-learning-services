@@ -17,7 +17,7 @@ import (
 	"github.com/joshua-zingale/ucr-learning-services/internal/taxis/internal/web"
 )
 
-const envVarPrefix = "TAXIS_"
+const _ENV_VAR_PREFIX = "TAXIS_"
 
 var rootCommandName = os.Args[0]
 
@@ -68,38 +68,18 @@ func serve(execution executionContext) {
 	flag := flag.NewFlagSet(execution.CommandName(), flag.ExitOnError)
 	flag.PrintDefaults()
 
-	configFilePath, argsWithoutConfig, err := confenvflag.ParseConfigArgument(execution.args)
-	if err != nil {
-		log.Fatal(err.Error())
-	}
-
-	configContent := []byte("")
-	if configFilePath != "" {
-		configContent, err = os.ReadFile(configFilePath)
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
-
-	envFlag, err := confenvflag.NewConfEnvFlagSet(flag, envVarPrefix, string(configContent))
-	if err != nil {
-		log.Fatal(err.Error())
-	}
-
 	var (
-		host                      = envFlag.String("host", "127.0.0.1", "the host at which the web server is broadcast.")
-		port                      = envFlag.String("port", "14812", "the port on which the web server is broadcast.")
-		rootPath                  = envFlag.String("root-path", "/taxis", "the root URI path for this web server.")
-		groupsHeaderName          = envFlag.String("groups-header", "X-Groups", "the header to which the assigned groups will be written.")
-		userIdHeaderName          = envFlag.String("user-id-header", "X-Email", "the header to which the user ID will be written.")
-		proxyUserIdHeaderName     = envFlag.String("auth-proxy-user-id-header", "X-Email", "the header to which the authentication proxy writes the user ID.")
-		authProxyUrlSting         = envFlag.String("auth-proxy-url", "", "the url of the authentication proxy.")
-		watchGroupsFile           = envFlag.Bool("watch", false, "If specified, the GROUPS_FILE.yml file is watched, so that any update to the file triggers the database to reload.")
-		printEnvironmentVariables = flag.Bool("print-supported-environment-variables", false, "If specified, prints all supported environment variables along with usages.")
-		_                         = flag.String("config", "", "the config file that set arguments for taxis")
+		host                  = flag.String("host", "127.0.0.1", "the host at which the web server is broadcast.")
+		port                  = flag.String("port", "14812", "the port on which the web server is broadcast.")
+		rootPath              = flag.String("root-path", "/taxis", "the root URI path for this web server.")
+		groupsHeaderName      = flag.String("groups-header", "X-Groups", "the header to which the assigned groups will be written.")
+		userIdHeaderName      = flag.String("user-id-header", "X-Email", "the header to which the user ID will be written.")
+		proxyUserIdHeaderName = flag.String("auth-proxy-user-id-header", "X-Email", "the header to which the authentication proxy writes the user ID.")
+		authProxyUrlSting     = flag.String("auth-proxy-url", "", "the url of the authentication proxy.")
+		watchGroupsFile       = flag.Bool("watch", false, "If specified, the GROUPS_FILE.yml file is watched, so that any update to the file triggers the database to reload.")
 	)
 
-	if err := envFlag.Parse(argsWithoutConfig); err != nil {
+	if err := confenvflag.Parse(flag, _ENV_VAR_PREFIX, execution.args); err != nil {
 		log.Fatal(err.Error())
 	}
 
@@ -107,11 +87,6 @@ func serve(execution executionContext) {
 	log.Printf("Groups header name %s: ...", *groupsHeaderName)
 	log.Printf("Groups host  %s: ...", *host)
 	log.Printf("rootPath host  %s: ...", *rootPath)
-
-	if *printEnvironmentVariables {
-		envFlag.PrintSupportedEnvironmentVariables()
-		os.Exit(0)
-	}
 
 	positionalArgs := flag.Args()
 	if len(positionalArgs) != 1 {

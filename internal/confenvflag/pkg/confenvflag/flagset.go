@@ -10,113 +10,105 @@ import (
 
 // Parses arguments, in order, from arguments, environment variables, then a config file.
 // Thus arguments overwrite environment variables, which overwrite the config file.
-type ConfEnvFlagSet struct {
-	FlagSet      *flag.FlagSet
-	envVarPrefix string
+func Parse(flagSet *flag.FlagSet, environmentVariablePrefix string, args []string) error {
+	if flagSet.ErrorHandling() != flag.ExitOnError {
+		panic("The input flagset must be set to ExitOnError because the other modes are not implemented!")
+	}
 
-	envVars []EnvironmentVariable
-	config  map[string]string
-}
+	flagSet.String("config", "", "the path to a configuration file. The config format is line-separated names, followed by an equals sign, then the value; each name in the config file is the parameter name with dashes (-) replaced with underscores (_)")
 
-type EnvironmentVariable struct {
-	name  string
-	type_ string
-	usage string
-}
+	if err := flagSet.Parse(args); err != nil {
+		return err
+	}
 
-func NewConfEnvFlagSet(flagSet *flag.FlagSet, envVarPrefix string, configContent string) (*ConfEnvFlagSet, error) {
+	var flags set[*flag.Flag]
+	flagSet.VisitAll(func(f *flag.Flag) {
+		flags.Add(f)
+	})
+
+	var setFlags set[*flag.Flag]
+	flagSet.Visit(func(f *flag.Flag) {
+		setFlags.Add(f)
+	})
+
+	unsetFlags := flags.Minus(setFlags)
+
+	configContent := ""
+
+	if configFilePath := flagSet.Lookup("config").Value.String(); configFilePath != "" {
+		var err error
+		fileContent, err := os.ReadFile(configFilePath)
+		if err != nil {
+			return fmt.Errorf("loading config: %w", err)
+		}
+		configContent = string(fileContent)
+	}
+
 	config, err := parseConfigContent(configContent)
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("reading config: %w", err)
 	}
-	return &ConfEnvFlagSet{
-		FlagSet:      flagSet,
-		envVarPrefix: envVarPrefix,
-		config:       config,
-	}, nil
-}
 
-func ParseConfigArgument(args []string) (string, []string, error) {
-	const CONFIG_NOT_FOUND = -1
-	configIdx := CONFIG_NOT_FOUND
-	for i := range args {
-		if args[i] == "-config" || args[i] == "--config" {
-			if configIdx != CONFIG_NOT_FOUND {
-				return "", nil, fmt.Errorf("found argument '%s', but '%s' was already specified", args[i], args[configIdx])
+	for _, flg := range unsetFlags {
+
+		configName := paramNameToConfigName(flg.Name)
+		if value, ok := config[configName]; ok {
+			if err := flg.Value.Set(value); err != nil {
+				return fmt.Errorf("setting value from config name '%e': %w", configName, err)
 			}
-			configIdx = i
 		}
-	}
-	if configIdx == CONFIG_NOT_FOUND {
-		return "", args, nil
-	}
 
-	if configIdx == len(args)-1 {
-		return "", nil, fmt.Errorf("expected path to config file after %s", args[configIdx])
-	}
-
-	var newArgs []string
-	for i, arg := range args {
-		if i == configIdx || i == configIdx+1 {
-			continue
+		envVarName := paramNameToEnvironName(environmentVariablePrefix, flg.Name)
+		if envVarValue := os.Getenv(envVarName); envVarValue != "" {
+			if err := flg.Value.Set(envVarValue); err != nil {
+				return fmt.Errorf("setting value from environment variable '%s': %w", envVarName, err)
+			}
 		}
-		newArgs = append(newArgs, arg)
+
 	}
 
-	return args[configIdx+1], newArgs, nil
+	return nil
 }
 
-func (edf *ConfEnvFlagSet) Parse(args []string) error {
-	flagNames := make(map[string]struct{})
-	edf.FlagSet.VisitAll(func(f *flag.Flag) {
-		flagNames[f.Name] = struct{}{}
-	})
-	for configName := range edf.config {
-		if _, ok := flagNames[configNameToParamName(configName)]; !ok {
-			return fmt.Errorf("unknown key in config: %s", configName)
+type set[T comparable] []T
+
+func (s *set[T]) Add(e T) {
+	*s = append(*s, e)
+}
+
+func (s set[T]) Minus(subtrahend set[T]) set[T] {
+	var diff set[T]
+
+outer:
+	for _, min := range s {
+		for _, sub := range subtrahend {
+			if sub == min {
+				continue outer
+			}
 		}
+		diff.Add(min)
 	}
 
-	return edf.FlagSet.Parse(args)
+	return diff
 }
 
-func (edf *ConfEnvFlagSet) String(name string, value string, usage string) *string {
-	edf.envVars = append(edf.envVars, EnvironmentVariable{name: edf.paramNameToEnvironName(name), type_: "str", usage: usage})
-	return edf.FlagSet.String(name, resolveDefault(edf, name, value, func(s string) string { return s }), usage)
-}
-
-func (edf *ConfEnvFlagSet) Bool(name string, value bool, usage string) *bool {
-
-	edf.envVars = append(edf.envVars, EnvironmentVariable{name: edf.paramNameToEnvironName(name), type_: "str", usage: fmt.Sprintf("'true', 't', 'yes', and 'y' set and all else unsets. %s", usage)})
-	return edf.FlagSet.Bool(name, resolveDefault(edf, name, value, func(s string) bool {
-		switch strings.ToLower(s) {
-		case "true", "t", "yes", "y":
+func (s set[T]) Contains(e T) bool {
+	for _, e2 := range s {
+		if e2 == e {
 			return true
-		default:
-			return false
 		}
-	}), usage)
-}
-
-func (edf *ConfEnvFlagSet) PrintSupportedEnvironmentVariables() {
-	for _, envVar := range edf.envVars {
-		fmt.Printf("%s|%s|%s\n", envVar.name, envVar.type_, envVar.usage)
 	}
-}
-
-func (edf *ConfEnvFlagSet) paramNameToEnvironName(s string) string {
-	s = strings.Replace(s, "-", "_", -1)
-	s = strings.ToUpper(s)
-
-	return strings.Join([]string{edf.envVarPrefix, s}, "")
-}
-
-func configNameToParamName(s string) string {
-	return strings.Replace(s, "_", "-", -1)
+	return false
 }
 
 func paramNameToConfigName(s string) string {
 	return strings.Replace(s, "-", "_", -1)
+}
+
+func paramNameToEnvironName(prefix string, s string) string {
+	s = strings.Replace(s, "-", "_", -1)
+	s = strings.ToUpper(s)
+	return prefix + s
 }
 
 func parseConfigContent(content string) (map[string]string, error) {
@@ -140,15 +132,4 @@ func parseConfigContent(content string) (map[string]string, error) {
 		}
 	}
 	return config, scanner.Err()
-}
-
-func resolveDefault[T any](edf *ConfEnvFlagSet, name string, fallback T, conversion func(string) T) T {
-
-	if envVarValue := os.Getenv(edf.paramNameToEnvironName(name)); envVarValue != "" {
-		return conversion(envVarValue)
-	}
-	if value, ok := edf.config[paramNameToConfigName(name)]; ok {
-		return conversion(value)
-	}
-	return fallback
 }
