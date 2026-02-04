@@ -1,0 +1,19 @@
+create table conversations (
+    conversation_id serial primary key,
+    name varchar(32)
+);
+
+create table messages (
+    message_id serial primary key,
+    conversation_id int not null references conversations(conversation_id) on delete cascade,
+    content text,
+    sent_at timestamp default NOW(),
+
+    author_type varchar(6) check (author_type in ('agent', 'user')),
+    agent_id int references agents(agent_id),
+    user_id varchar(32),
+    check (
+        (author_type = 'agent' AND agent_id is not null AND user_id is null)
+        OR
+        (author_type = 'user' AND user_id is not null AND agent_id is null))
+);
