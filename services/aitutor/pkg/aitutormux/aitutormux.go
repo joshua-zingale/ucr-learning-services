@@ -39,9 +39,14 @@ func NewAiTutorMux(config *AiTutorConfig) http.Handler {
 			return
 		}
 
-		agent, err := config.Db.GetAgent(r.Context(), &AgentId{
-			AgentId: agentId,
-		})
+		agent, err := config.Db.GetAgent(r.Context(), AgentId(agentId))
+		if err != nil {
+			http.Error(w, "Not Found", http.StatusNotFound)
+			log.Print(err.Error())
+			return
+		}
+
+		agentConfig, err := config.Db.GetAgentConfig(r.Context(), AgentId(agentId))
 		if err != nil {
 			http.Error(w, "Not Found", http.StatusNotFound)
 			log.Print(err.Error())
@@ -49,7 +54,15 @@ func NewAiTutorMux(config *AiTutorConfig) http.Handler {
 		}
 
 		enc := json.NewEncoder(w)
-		enc.Encode(agent)
+		enc.Encode(struct {
+			Id           int    `json:"id"`
+			Name         string `json:"name"`
+			SystemPrompt string `json:"systemPrompt"`
+		}{
+			Id:           agentId,
+			Name:         agent.Name,
+			SystemPrompt: agentConfig.SystemPrompt,
+		})
 	})
 
 	return mux

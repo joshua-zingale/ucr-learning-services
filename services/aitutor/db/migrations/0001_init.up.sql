@@ -1,4 +1,4 @@
-CREATE TABLE agents (
-    agent_id SERIAL PRIMARY KEY,
-    name VARCHAR(50)
+create table agents (
+    agent_id serial primary key,
+    name varchar(50)
 );

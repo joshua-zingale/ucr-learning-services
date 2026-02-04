@@ -38,11 +38,11 @@ func NewPostgresDB(ctx context.Context, config *PostgresConfig) (aitutormux.Data
 	}, nil
 }
 
-func (pg *PostgresDB) GetAgent(ctx context.Context, agentId *aitutormux.AgentId) (*aitutormux.Agent, error) {
+func (pg *PostgresDB) GetAgent(ctx context.Context, agentId aitutormux.AgentId) (*aitutormux.Agent, error) {
 	row := pg.Pool.QueryRow(ctx, `
 	SELECT name
 	FROM agents
-	WHERE agent_id = $1`, agentId.AgentId)
+	WHERE agent_id = $1`, agentId)
 
 	var name string
 	if err := row.Scan(&name); err != nil {
@@ -51,7 +51,25 @@ func (pg *PostgresDB) GetAgent(ctx context.Context, agentId *aitutormux.AgentId)
 	}
 
 	return &aitutormux.Agent{
-		AgentId: *agentId,
+		AgentId: agentId,
 		Name:    name,
+	}, nil
+}
+
+func (pg *PostgresDB) GetAgentConfig(ctx context.Context, agentId aitutormux.AgentId) (*aitutormux.AgentConfig, error) {
+	row := pg.Pool.QueryRow(ctx, `
+	SELECT system_prompt
+	FROM agent_configs
+	WHERE agent_id = $1`, agentId)
+
+	var systemPrompt string
+	if err := row.Scan(&systemPrompt); err != nil {
+		return nil, err
+
+	}
+
+	return &aitutormux.AgentConfig{
+		AgentId:      agentId,
+		SystemPrompt: systemPrompt,
 	}, nil
 }
