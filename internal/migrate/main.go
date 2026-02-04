@@ -157,7 +157,7 @@ func main() {
 			cmd := getCommand(cmdString)
 			if err := cmd.Run(); err != nil {
 				fmt.Fprintf(os.Stderr, "Failed at %s: %s", migrationFile, err.Error())
-				os.Exit(1)
+				break
 			}
 		}
 
