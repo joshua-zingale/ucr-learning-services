@@ -4,8 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-
-	"github.com/joshua-zingale/ucr-learning-services/services/aitutor/pkg/restapi"
+	"strconv"
 )
 
 type AuthService interface {
@@ -25,16 +24,16 @@ type AiTutorConfig struct {
 func NewAiTutorMux(config *AiTutorConfig) http.Handler {
 	mux := http.NewServeMux()
 
-	restapi.HandleResource(mux, "GET", AGENT_RESOURCE, func(w http.ResponseWriter, r *http.Request, rc *restapi.ResourceContext) {
+	mux.HandleFunc("GET /agents/{agentId}", func(w http.ResponseWriter, r *http.Request) {
 		_, err := config.Auth.Authenticate(r)
 		if err != nil {
 			http.Error(w, "Not Authenticated", http.StatusUnauthorized)
 			return
 		}
 
-		agentId, err := rc.ResourceId.GetInt(restapi.GetResourcePathVariableName(AGENT_RESOURCE))
+		agentId, err := strconv.Atoi(r.PathValue("agentId"))
 		if err != nil {
-			http.Error(w, "Bad Request", http.StatusBadRequest)
+			http.Error(w, "Not Found", http.StatusNotFound)
 			log.Print(err.Error())
 			return
 		}
