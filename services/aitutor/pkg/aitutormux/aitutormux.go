@@ -31,9 +31,25 @@ func NewAiTutorMux(config *AiTutorConfig) http.Handler {
 
 	mux.HandleFunc("GET /agents/{agentId}", func(w http.ResponseWriter, r *http.Request) {
 
-		_, err := config.Auth.Authenticate(r)
+		profile, err := config.Auth.Authenticate(r)
 		if err != nil {
 			http.Error(w, "Not Authenticated", http.StatusUnauthorized)
+			return
+		}
+
+		agentId, err := strconv.ParseInt(r.PathValue("agentId"), 10, 32)
+		if err != nil {
+			http.Error(w, "Not Found", http.StatusNotFound)
+			return
+		}
+
+		if hasPermission, err := config.Db.HasAgentPermission(r.Context(), database.HasAgentPermissionParams{
+			UserID:   profile.UserId,
+			GroupIds: profile.UserGroups,
+			AgentID:  int32(agentId),
+			Ability:  database.AbilityTypeRead,
+		}); err != nil || !hasPermission {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
 
@@ -43,8 +59,7 @@ func NewAiTutorMux(config *AiTutorConfig) http.Handler {
 		}
 
 		if acceptsJson(r) {
-			enc := json.NewEncoder(w)
-			enc.Encode(agent)
+			respondJson(w, agent)
 			return
 		}
 
@@ -57,6 +72,12 @@ func NewAiTutorMux(config *AiTutorConfig) http.Handler {
 
 func acceptsJson(r *http.Request) bool {
 	return strings.Contains(r.Header.Get("Accept"), "application/json")
+}
+
+func respondJson[T any](w http.ResponseWriter, v T) {
+	w.Header().Set("Content-Type", "application/json")
+	enc := json.NewEncoder(w)
+	enc.Encode(v)
 }
 
 var AlreadyResponded error = errors.New("response already written")

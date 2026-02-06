@@ -1,3 +1,5 @@
+set -e
+
 db_to_delete=${1:-aitutor_go}
 
 sqlc generate

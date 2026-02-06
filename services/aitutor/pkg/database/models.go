@@ -6,7 +6,51 @@ package database
 
 import (
 	"database/sql"
+	"database/sql/driver"
+	"fmt"
 )
+
+type AbilityType string
+
+const (
+	AbilityTypeRead  AbilityType = "read"
+	AbilityTypeWrite AbilityType = "write"
+)
+
+func (e *AbilityType) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = AbilityType(s)
+	case string:
+		*e = AbilityType(s)
+	default:
+		return fmt.Errorf("unsupported scan type for AbilityType: %T", src)
+	}
+	return nil
+}
+
+type NullAbilityType struct {
+	AbilityType AbilityType `json:"abilityType"`
+	Valid       bool        `json:"valid"` // Valid is true if AbilityType is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullAbilityType) Scan(value interface{}) error {
+	if value == nil {
+		ns.AbilityType, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.AbilityType.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullAbilityType) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.AbilityType), nil
+}
 
 type Agent struct {
 	AgentID int32  `json:"agentId"`
@@ -23,6 +67,12 @@ type Conversation struct {
 	Name           sql.NullString `json:"name"`
 }
 
+type GroupAgentPermission struct {
+	GroupID string      `json:"groupId"`
+	AgentID int32       `json:"agentId"`
+	Ability AbilityType `json:"ability"`
+}
+
 type Message struct {
 	MessageID      int32          `json:"messageId"`
 	ConversationID int32          `json:"conversationId"`
@@ -31,4 +81,10 @@ type Message struct {
 	AuthorType     sql.NullString `json:"authorType"`
 	AgentID        sql.NullInt32  `json:"agentId"`
 	UserID         sql.NullString `json:"userId"`
+}
+
+type UserAgentPermission struct {
+	UserID  string      `json:"userId"`
+	AgentID int32       `json:"agentId"`
+	Ability AbilityType `json:"ability"`
 }

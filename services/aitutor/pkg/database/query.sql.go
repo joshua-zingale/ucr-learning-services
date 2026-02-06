@@ -28,3 +28,38 @@ func (q *Queries) GetAgentFull(ctx context.Context, agentID int32) (GetAgentFull
 	err := row.Scan(&i.AgentID, &i.Name, &i.SystemPrompt)
 	return i, err
 }
+
+const hasAgentPermission = `-- name: HasAgentPermission :one
+SELECT EXISTS (
+    SELECT 1 FROM user_agent_permissions uap
+    WHERE uap.user_id = $1 
+      AND uap.agent_id = $2 
+      AND uap.ability = $3
+    
+    UNION ALL
+    
+    SELECT 1 FROM group_agent_permissions
+    WHERE group_id = ANY($4::text[])
+      AND agent_id = $2 
+      AND ability = $3
+)
+`
+
+type HasAgentPermissionParams struct {
+	UserID   string      `json:"userId"`
+	AgentID  int32       `json:"agentId"`
+	Ability  AbilityType `json:"ability"`
+	GroupIds []string    `json:"groupIds"`
+}
+
+func (q *Queries) HasAgentPermission(ctx context.Context, arg HasAgentPermissionParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasAgentPermission,
+		arg.UserID,
+		arg.AgentID,
+		arg.Ability,
+		arg.GroupIds,
+	)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
