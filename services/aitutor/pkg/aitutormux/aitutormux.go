@@ -26,49 +26,62 @@ type AiTutorConfig struct {
 	Auth AuthService
 }
 
+type aiTutorHandler struct {
+	*AiTutorConfig
+}
+
 func NewAiTutorMux(config *AiTutorConfig) http.Handler {
+	if config == nil {
+		panic("config cannot be nil")
+	}
+
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("GET /agents/{agentId}", func(w http.ResponseWriter, r *http.Request) {
+	handler := aiTutorHandler{
+		AiTutorConfig: config,
+	}
 
-		profile, err := config.Auth.Authenticate(r)
-		if err != nil {
-			http.Error(w, "Not Authenticated", http.StatusUnauthorized)
-			return
-		}
-
-		agentId, err := strconv.ParseInt(r.PathValue("agentId"), 10, 32)
-		if err != nil {
-			http.Error(w, "Not Found", http.StatusNotFound)
-			return
-		}
-
-		if hasPermission, err := config.Db.HasAgentPermission(r.Context(), database.HasAgentPermissionParams{
-			UserID:   profile.UserId,
-			GroupIds: profile.UserGroups,
-			AgentID:  int32(agentId),
-			Ability:  database.AgentAbilityTypeManage,
-		}); err != nil || !hasPermission {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
-			return
-		}
-
-		agent, err := config.Db.GetAgentFull(r.Context(), int32(agentId))
-		if err != nil {
-			http.Error(w, "Not Found", http.StatusNotFound)
-			return
-		}
-
-		if acceptsJson(r) {
-			respondJson(w, agent)
-			return
-		}
-
-		w.Write([]byte("Under construction!"))
-
-	})
+	mux.HandleFunc("GET /agents/{agentId}", handler.handleGetAgent)
 
 	return mux
+}
+
+func (ath *aiTutorHandler) handleGetAgent(w http.ResponseWriter, r *http.Request) {
+
+	profile, err := ath.Auth.Authenticate(r)
+	if err != nil {
+		http.Error(w, "Not Authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	agentId, err := strconv.ParseInt(r.PathValue("agentId"), 10, 32)
+	if err != nil {
+		http.Error(w, "Not Found", http.StatusNotFound)
+		return
+	}
+
+	if hasPermission, err := ath.Db.HasAgentPermission(r.Context(), database.HasAgentPermissionParams{
+		UserID:   profile.UserId,
+		GroupIds: profile.UserGroups,
+		AgentID:  int32(agentId),
+		Ability:  database.AgentAbilityTypeManage,
+	}); err != nil || !hasPermission {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	agent, err := ath.Db.GetAgentFull(r.Context(), int32(agentId))
+	if err != nil {
+		http.Error(w, "Not Found", http.StatusNotFound)
+		return
+	}
+
+	if acceptsJson(r) {
+		respondJson(w, agent)
+		return
+	}
+
+	w.Write([]byte("Under construction!"))
 }
 
 func acceptsJson(r *http.Request) bool {
