@@ -1,0 +1,9 @@
+version: "2"
+sql:
+  - engine: postgresql
+    queries: pkg/database/query.sql
+    schema: db/schema.sql
+    gen:
+      go:
+        out: pkg/database
+        sql_package: pgx/v4

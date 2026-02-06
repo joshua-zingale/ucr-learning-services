@@ -1,3 +1,13 @@
+create table agents (
+    agent_id serial primary key,
+    name varchar(32) not null
+);
+
+create table agent_configs (
+    agent_id int references agents(agent_id) on delete cascade primary key ,
+    system_prompt text not null
+);
+
 create table conversations (
     conversation_id serial primary key,
     name varchar(32)
