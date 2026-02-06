@@ -59,10 +59,6 @@ func NewAiTutorMux(config *AiTutorConfig) http.Handler {
 			return
 		}
 
-		if err != nil {
-			return
-		}
-
 		if acceptsJson(r) {
 			respondJson(w, agent)
 			return
