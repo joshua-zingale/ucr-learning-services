@@ -27,7 +27,8 @@ create table group_agent_permissions (
 
 create table conversations (
     conversation_id serial primary key,
-    name varchar(32)
+    user_id varchar(32) not null,
+    name varchar(32) not null
 );
 
 create table messages (

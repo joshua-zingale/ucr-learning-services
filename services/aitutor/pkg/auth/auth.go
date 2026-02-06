@@ -14,14 +14,15 @@ const _USER_GROUP_SEPARATOR = ","
 
 type TaxisAuth struct{}
 
-func (ta TaxisAuth) Authenticate(r *http.Request) (*aitutormux.UserProfile, error) {
+func (ta TaxisAuth) Authenticate(r *http.Request) (aitutormux.UserProfile, error) {
 
 	userId := r.Header.Get(_USER_ID_HEADER_NAME)
 	if userId == "" {
-		return nil, fmt.Errorf("missing '%s' header", _USER_ID_HEADER_NAME)
+		var up aitutormux.UserProfile
+		return up, fmt.Errorf("missing '%s' header", _USER_ID_HEADER_NAME)
 	}
 
-	return &aitutormux.UserProfile{
+	return aitutormux.UserProfile{
 		UserId:     userId,
 		UserGroups: strings.Split(r.Header.Get(_USER_GROUPS_HEADER_NAME), _USER_GROUP_SEPARATOR),
 	}, nil

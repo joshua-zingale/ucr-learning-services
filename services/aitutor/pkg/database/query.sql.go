@@ -29,6 +29,37 @@ func (q *Queries) GetAgentFull(ctx context.Context, agentID int32) (GetAgentFull
 	return i, err
 }
 
+const getConversations = `-- name: GetConversations :many
+select conversation_id, name
+from conversations
+where user_id = $1
+`
+
+type GetConversationsRow struct {
+	ConversationID int32  `json:"conversationId"`
+	Name           string `json:"name"`
+}
+
+func (q *Queries) GetConversations(ctx context.Context, userID string) ([]GetConversationsRow, error) {
+	rows, err := q.db.Query(ctx, getConversations, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetConversationsRow
+	for rows.Next() {
+		var i GetConversationsRow
+		if err := rows.Scan(&i.ConversationID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const hasAgentPermission = `-- name: HasAgentPermission :one
 SELECT EXISTS (
     SELECT 1 FROM user_agent_permissions uap

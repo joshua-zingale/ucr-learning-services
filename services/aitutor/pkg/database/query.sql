@@ -18,3 +18,8 @@ SELECT EXISTS (
       AND agent_id = @agent_id 
       AND ability = @ability
 );
+
+-- name: GetConversations :many
+select conversation_id, name
+from conversations
+where user_id = $1;

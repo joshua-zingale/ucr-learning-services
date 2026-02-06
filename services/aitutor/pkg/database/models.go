@@ -105,8 +105,9 @@ type AgentConfig struct {
 }
 
 type Conversation struct {
-	ConversationID int32          `json:"conversationId"`
-	Name           sql.NullString `json:"name"`
+	ConversationID int32  `json:"conversationId"`
+	UserID         string `json:"userId"`
+	Name           string `json:"name"`
 }
 
 type GroupAgentPermission struct {
