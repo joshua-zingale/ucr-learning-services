@@ -1,5 +1,5 @@
-CREATE TYPE agent_permission_type AS ENUM ('manage', 'interact');
-
+CREATE TYPE agent_ability_type AS ENUM ('manage', 'interact');
+CREATE TYPE message_type AS ENUM ('user', 'agent');
 
 create table agents (
     agent_id serial primary key,
@@ -14,14 +14,14 @@ create table agent_configs (
 create table user_agent_permissions (
     user_id varchar(32),
     agent_id int references agents(agent_id) on delete cascade,
-    ability agent_permission_type,
+    ability agent_ability_type,
     primary key (user_id, agent_id, ability)
 );
 
 create table group_agent_permissions (
     group_id varchar(32),
     agent_id int references agents(agent_id) on delete cascade,
-    ability agent_permission_type,
+    ability agent_ability_type,
     primary key (group_id, agent_id, ability)
 );
 
@@ -36,7 +36,7 @@ create table messages (
     content text,
     sent_at timestamp default NOW(),
 
-    author_type varchar(6) check (author_type in ('agent', 'user')),
+    author_type message_type,
     agent_id int references agents(agent_id),
     user_id varchar(32),
     check (

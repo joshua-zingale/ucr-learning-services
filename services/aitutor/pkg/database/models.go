@@ -10,46 +10,88 @@ import (
 	"fmt"
 )
 
-type AgentPermissionType string
+type AgentAbilityType string
 
 const (
-	AgentPermissionTypeManage   AgentPermissionType = "manage"
-	AgentPermissionTypeInteract AgentPermissionType = "interact"
+	AgentAbilityTypeManage   AgentAbilityType = "manage"
+	AgentAbilityTypeInteract AgentAbilityType = "interact"
 )
 
-func (e *AgentPermissionType) Scan(src interface{}) error {
+func (e *AgentAbilityType) Scan(src interface{}) error {
 	switch s := src.(type) {
 	case []byte:
-		*e = AgentPermissionType(s)
+		*e = AgentAbilityType(s)
 	case string:
-		*e = AgentPermissionType(s)
+		*e = AgentAbilityType(s)
 	default:
-		return fmt.Errorf("unsupported scan type for AgentPermissionType: %T", src)
+		return fmt.Errorf("unsupported scan type for AgentAbilityType: %T", src)
 	}
 	return nil
 }
 
-type NullAgentPermissionType struct {
-	AgentPermissionType AgentPermissionType `json:"agentPermissionType"`
-	Valid               bool                `json:"valid"` // Valid is true if AgentPermissionType is not NULL
+type NullAgentAbilityType struct {
+	AgentAbilityType AgentAbilityType `json:"agentAbilityType"`
+	Valid            bool             `json:"valid"` // Valid is true if AgentAbilityType is not NULL
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullAgentPermissionType) Scan(value interface{}) error {
+func (ns *NullAgentAbilityType) Scan(value interface{}) error {
 	if value == nil {
-		ns.AgentPermissionType, ns.Valid = "", false
+		ns.AgentAbilityType, ns.Valid = "", false
 		return nil
 	}
 	ns.Valid = true
-	return ns.AgentPermissionType.Scan(value)
+	return ns.AgentAbilityType.Scan(value)
 }
 
 // Value implements the driver Valuer interface.
-func (ns NullAgentPermissionType) Value() (driver.Value, error) {
+func (ns NullAgentAbilityType) Value() (driver.Value, error) {
 	if !ns.Valid {
 		return nil, nil
 	}
-	return string(ns.AgentPermissionType), nil
+	return string(ns.AgentAbilityType), nil
+}
+
+type MessageType string
+
+const (
+	MessageTypeUser  MessageType = "user"
+	MessageTypeAgent MessageType = "agent"
+)
+
+func (e *MessageType) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = MessageType(s)
+	case string:
+		*e = MessageType(s)
+	default:
+		return fmt.Errorf("unsupported scan type for MessageType: %T", src)
+	}
+	return nil
+}
+
+type NullMessageType struct {
+	MessageType MessageType `json:"messageType"`
+	Valid       bool        `json:"valid"` // Valid is true if MessageType is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullMessageType) Scan(value interface{}) error {
+	if value == nil {
+		ns.MessageType, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.MessageType.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullMessageType) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.MessageType), nil
 }
 
 type Agent struct {
@@ -68,23 +110,23 @@ type Conversation struct {
 }
 
 type GroupAgentPermission struct {
-	GroupID string              `json:"groupId"`
-	AgentID int32               `json:"agentId"`
-	Ability AgentPermissionType `json:"ability"`
+	GroupID string           `json:"groupId"`
+	AgentID int32            `json:"agentId"`
+	Ability AgentAbilityType `json:"ability"`
 }
 
 type Message struct {
-	MessageID      int32          `json:"messageId"`
-	ConversationID int32          `json:"conversationId"`
-	Content        sql.NullString `json:"content"`
-	SentAt         sql.NullTime   `json:"sentAt"`
-	AuthorType     sql.NullString `json:"authorType"`
-	AgentID        sql.NullInt32  `json:"agentId"`
-	UserID         sql.NullString `json:"userId"`
+	MessageID      int32           `json:"messageId"`
+	ConversationID int32           `json:"conversationId"`
+	Content        sql.NullString  `json:"content"`
+	SentAt         sql.NullTime    `json:"sentAt"`
+	AuthorType     NullMessageType `json:"authorType"`
+	AgentID        sql.NullInt32   `json:"agentId"`
+	UserID         sql.NullString  `json:"userId"`
 }
 
 type UserAgentPermission struct {
-	UserID  string              `json:"userId"`
-	AgentID int32               `json:"agentId"`
-	Ability AgentPermissionType `json:"ability"`
+	UserID  string           `json:"userId"`
+	AgentID int32            `json:"agentId"`
+	Ability AgentAbilityType `json:"ability"`
 }
