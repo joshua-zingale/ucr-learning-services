@@ -53,7 +53,12 @@ func NewAiTutorMux(config *AiTutorConfig) http.Handler {
 			return
 		}
 
-		agent, err := getResourceByIntInPath(w, r, "agentId", config.Db.GetAgentFull)
+		agent, err := config.Db.GetAgentFull(r.Context(), int32(agentId))
+		if err != nil {
+			http.Error(w, "Not Found", http.StatusNotFound)
+			return
+		}
+
 		if err != nil {
 			return
 		}
