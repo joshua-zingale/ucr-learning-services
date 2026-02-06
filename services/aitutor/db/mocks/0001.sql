@@ -6,10 +6,10 @@ insert into agent_configs (agent_id, system_prompt) values
 (3, 'Your father is the president of Osborn technology. Speak to the user like you know nothing of the green goblin, but drop hints.');
 
 insert into user_agent_permissions (user_id, agent_id, ability) values
-('tom', 1, 'read');
+('tom', 1, 'manage');
 insert into group_agent_permissions (group_id, agent_id, ability) values
-('cs100.instructor', 2, 'read'),
-('cs100.instructor', 2, 'write');
+('cs100.instructor', 2, 'manage'),
+('cs100.instructor', 2, 'interact');
 
 insert into conversations (conversation_id, name) values (1, 'first conversation');
 

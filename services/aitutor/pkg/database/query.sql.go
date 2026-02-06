@@ -46,10 +46,10 @@ SELECT EXISTS (
 `
 
 type HasAgentPermissionParams struct {
-	UserID   string      `json:"userId"`
-	AgentID  int32       `json:"agentId"`
-	Ability  AbilityType `json:"ability"`
-	GroupIds []string    `json:"groupIds"`
+	UserID   string              `json:"userId"`
+	AgentID  int32               `json:"agentId"`
+	Ability  AgentPermissionType `json:"ability"`
+	GroupIds []string            `json:"groupIds"`
 }
 
 func (q *Queries) HasAgentPermission(ctx context.Context, arg HasAgentPermissionParams) (bool, error) {

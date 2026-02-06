@@ -1,4 +1,4 @@
-CREATE TYPE ability_type AS ENUM ('read', 'write');
+CREATE TYPE agent_permission_type AS ENUM ('manage', 'interact');
 
 
 create table agents (
@@ -14,14 +14,14 @@ create table agent_configs (
 create table user_agent_permissions (
     user_id varchar(32),
     agent_id int references agents(agent_id) on delete cascade,
-    ability ability_type,
+    ability agent_permission_type,
     primary key (user_id, agent_id, ability)
 );
 
 create table group_agent_permissions (
     group_id varchar(32),
     agent_id int references agents(agent_id) on delete cascade,
-    ability ability_type,
+    ability agent_permission_type,
     primary key (group_id, agent_id, ability)
 );
 

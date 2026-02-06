@@ -47,7 +47,7 @@ func NewAiTutorMux(config *AiTutorConfig) http.Handler {
 			UserID:   profile.UserId,
 			GroupIds: profile.UserGroups,
 			AgentID:  int32(agentId),
-			Ability:  database.AbilityTypeRead,
+			Ability:  database.AgentPermissionTypeManage,
 		}); err != nil || !hasPermission {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
