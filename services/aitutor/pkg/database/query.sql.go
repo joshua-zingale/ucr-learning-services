@@ -9,30 +9,28 @@ import (
 	"context"
 )
 
-const getAgent = `-- name: GetAgent :one
-select agent_id, name
-from agents
-where agent_id=$1
+const getAgentFull = `-- name: GetAgentFull :one
+select agents.agent_id, name, agent_configs.agent_id, system_prompt
+from agents join agent_configs on agents.agent_id = agent_configs.agent_id
+where agents.agent_id=$1
 limit 1
 `
 
-func (q *Queries) GetAgent(ctx context.Context, agentID int32) (Agent, error) {
-	row := q.db.QueryRow(ctx, getAgent, agentID)
-	var i Agent
-	err := row.Scan(&i.AgentID, &i.Name)
-	return i, err
+type GetAgentFullRow struct {
+	AgentID      int32
+	Name         string
+	AgentID_2    int32
+	SystemPrompt string
 }
 
-const getAgentConfig = `-- name: GetAgentConfig :one
-select agent_id, system_prompt
-from agent_configs
-where agent_id=$1
-limit 1
-`
-
-func (q *Queries) GetAgentConfig(ctx context.Context, agentID int32) (AgentConfig, error) {
-	row := q.db.QueryRow(ctx, getAgentConfig, agentID)
-	var i AgentConfig
-	err := row.Scan(&i.AgentID, &i.SystemPrompt)
+func (q *Queries) GetAgentFull(ctx context.Context, agentID int32) (GetAgentFullRow, error) {
+	row := q.db.QueryRow(ctx, getAgentFull, agentID)
+	var i GetAgentFullRow
+	err := row.Scan(
+		&i.AgentID,
+		&i.Name,
+		&i.AgentID_2,
+		&i.SystemPrompt,
+	)
 	return i, err
 }

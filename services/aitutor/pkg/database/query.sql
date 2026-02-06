@@ -1,12 +1,5 @@
--- name: GetAgent :one
+-- name: GetAgentFull :one
 select *
-from agents
-where agent_id=$1
-limit 1;
-
-
--- name: GetAgentConfig :one
-select *
-from agent_configs
-where agent_id=$1
+from agents join agent_configs on agents.agent_id = agent_configs.agent_id
+where agents.agent_id=$1
 limit 1;
