@@ -9,26 +9,26 @@ import (
 )
 
 type Agent struct {
-	AgentID int32
-	Name    string
+	AgentID int32  `json:"agentId"`
+	Name    string `json:"name"`
 }
 
 type AgentConfig struct {
-	AgentID      int32
-	SystemPrompt string
+	AgentID      int32  `json:"agentId"`
+	SystemPrompt string `json:"systemPrompt"`
 }
 
 type Conversation struct {
-	ConversationID int32
-	Name           sql.NullString
+	ConversationID int32          `json:"conversationId"`
+	Name           sql.NullString `json:"name"`
 }
 
 type Message struct {
-	MessageID      int32
-	ConversationID int32
-	Content        sql.NullString
-	SentAt         sql.NullTime
-	AuthorType     sql.NullString
-	AgentID        sql.NullInt32
-	UserID         sql.NullString
+	MessageID      int32          `json:"messageId"`
+	ConversationID int32          `json:"conversationId"`
+	Content        sql.NullString `json:"content"`
+	SentAt         sql.NullTime   `json:"sentAt"`
+	AuthorType     sql.NullString `json:"authorType"`
+	AgentID        sql.NullInt32  `json:"agentId"`
+	UserID         sql.NullString `json:"userId"`
 }

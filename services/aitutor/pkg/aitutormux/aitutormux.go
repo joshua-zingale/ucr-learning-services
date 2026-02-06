@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/joshua-zingale/ucr-learning-services/services/aitutor/pkg/database"
 )
@@ -41,19 +42,21 @@ func NewAiTutorMux(config *AiTutorConfig) http.Handler {
 			return
 		}
 
-		enc := json.NewEncoder(w)
-		enc.Encode(struct {
-			Id           int32  `json:"id"`
-			Name         string `json:"name"`
-			SystemPrompt string `json:"systemPrompt"`
-		}{
-			Id:           agent.AgentID,
-			Name:         agent.Name,
-			SystemPrompt: agent.SystemPrompt,
-		})
+		if acceptsJson(r) {
+			enc := json.NewEncoder(w)
+			enc.Encode(agent)
+			return
+		}
+
+		w.Write([]byte("Under construction!"))
+
 	})
 
 	return mux
+}
+
+func acceptsJson(r *http.Request) bool {
+	return strings.Contains(r.Header.Get("Accept"), "application/json")
 }
 
 var AlreadyResponded error = errors.New("response already written")

@@ -10,27 +10,21 @@ import (
 )
 
 const getAgentFull = `-- name: GetAgentFull :one
-select agents.agent_id, name, agent_configs.agent_id, system_prompt
+select agents.agent_id, agents.name, agent_configs.system_prompt
 from agents join agent_configs on agents.agent_id = agent_configs.agent_id
 where agents.agent_id=$1
 limit 1
 `
 
 type GetAgentFullRow struct {
-	AgentID      int32
-	Name         string
-	AgentID_2    int32
-	SystemPrompt string
+	AgentID      int32  `json:"agentId"`
+	Name         string `json:"name"`
+	SystemPrompt string `json:"systemPrompt"`
 }
 
 func (q *Queries) GetAgentFull(ctx context.Context, agentID int32) (GetAgentFullRow, error) {
 	row := q.db.QueryRow(ctx, getAgentFull, agentID)
 	var i GetAgentFullRow
-	err := row.Scan(
-		&i.AgentID,
-		&i.Name,
-		&i.AgentID_2,
-		&i.SystemPrompt,
-	)
+	err := row.Scan(&i.AgentID, &i.Name, &i.SystemPrompt)
 	return i, err
 }
