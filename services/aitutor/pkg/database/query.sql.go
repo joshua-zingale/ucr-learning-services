@@ -7,6 +7,7 @@ package database
 
 import (
 	"context"
+	"database/sql"
 )
 
 const getAgentFull = `-- name: GetAgentFull :one
@@ -27,6 +28,49 @@ func (q *Queries) GetAgentFull(ctx context.Context, agentID int32) (GetAgentFull
 	var i GetAgentFullRow
 	err := row.Scan(&i.AgentID, &i.Name, &i.SystemPrompt)
 	return i, err
+}
+
+const getConversationMessages = `-- name: GetConversationMessages :many
+select m.message_id, m.content, m.sent_at, m.author_type, m.agent_id, m.user_id
+from messages as m
+where m.conversation_id = $1
+order by m.sent_at desc, m.message_id asc
+`
+
+type GetConversationMessagesRow struct {
+	MessageID  int32           `json:"messageId"`
+	Content    sql.NullString  `json:"content"`
+	SentAt     sql.NullTime    `json:"sentAt"`
+	AuthorType NullMessageType `json:"authorType"`
+	AgentID    sql.NullInt32   `json:"agentId"`
+	UserID     sql.NullString  `json:"userId"`
+}
+
+func (q *Queries) GetConversationMessages(ctx context.Context, conversationID int32) ([]GetConversationMessagesRow, error) {
+	rows, err := q.db.Query(ctx, getConversationMessages, conversationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetConversationMessagesRow
+	for rows.Next() {
+		var i GetConversationMessagesRow
+		if err := rows.Scan(
+			&i.MessageID,
+			&i.Content,
+			&i.SentAt,
+			&i.AuthorType,
+			&i.AgentID,
+			&i.UserID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getConversations = `-- name: GetConversations :many
@@ -90,6 +134,26 @@ func (q *Queries) HasAgentPermission(ctx context.Context, arg HasAgentPermission
 		arg.Ability,
 		arg.GroupIds,
 	)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const startedConversation = `-- name: StartedConversation :one
+select exists (
+    select 1
+    from conversations
+    where conversation_id = $1 AND user_id = $2
+)
+`
+
+type StartedConversationParams struct {
+	ConversationID int32  `json:"conversationId"`
+	UserID         string `json:"userId"`
+}
+
+func (q *Queries) StartedConversation(ctx context.Context, arg StartedConversationParams) (bool, error) {
+	row := q.db.QueryRow(ctx, startedConversation, arg.ConversationID, arg.UserID)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err

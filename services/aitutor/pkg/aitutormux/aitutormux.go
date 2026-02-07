@@ -55,21 +55,9 @@ func NewAiTutorMux(config *AiTutorConfig) http.Handler {
 
 	mux.HandleFunc("GET /api/agents/{agentId}", buildRoute(h.setId("agentId"), h.authenticate, h.authorizeManageAgent, h.fetchAgent, renderJson))
 	mux.HandleFunc("GET /api/conversations", buildRoute(nil, h.authenticate, nil, h.fetchConversations, renderJson))
+	mux.HandleFunc("GET /api/conversations/{conversationId}/messages", buildRoute(h.setId("conversationId"), h.authenticate, h.authorizeStartedConversation, h.fetchConversationMessages, renderJson))
 
 	return mux
-}
-
-func (ath *aiTutorHandler) setId(pathParamName string) setContextFunction {
-	return func(w http.ResponseWriter, r *http.Request) bool {
-		id, err := strconv.ParseInt(r.PathValue(pathParamName), 10, 64)
-		if err != nil {
-			ath.notFoundError(w, r)
-			return false
-		}
-		(*r) = *r.WithContext(context.WithValue(r.Context(), idKey, idType(id)))
-		return true
-	}
-
 }
 
 func (ath *aiTutorHandler) fetchConversations(w http.ResponseWriter, r *http.Request, profile UserProfile) ([]database.GetConversationsRow, bool) {
@@ -79,6 +67,43 @@ func (ath *aiTutorHandler) fetchConversations(w http.ResponseWriter, r *http.Req
 		return nil, false
 	}
 	return conversations, true
+}
+
+func (ath *aiTutorHandler) fetchAgent(w http.ResponseWriter, r *http.Request, profile UserProfile) (database.GetAgentFullRow, bool) {
+
+	agentId := r.Context().Value(idKey).(idType)
+
+	agent, err := ath.Db.GetAgentFull(r.Context(), int32(agentId))
+	if err != nil {
+		ath.notFoundError(w, r)
+		return agent, false
+	}
+
+	return agent, true
+}
+
+func (ath *aiTutorHandler) fetchConversationMessages(w http.ResponseWriter, r *http.Request, _ UserProfile) ([]database.GetConversationMessagesRow, bool) {
+	conversationId := r.Context().Value(idKey).(idType)
+
+	messages, err := ath.Db.GetConversationMessages(r.Context(), int32(conversationId))
+	if err != nil {
+		ath.internalError(w, r)
+		return messages, false
+	}
+
+	return messages, true
+}
+
+func (ath *aiTutorHandler) authenticate(w http.ResponseWriter, r *http.Request) (UserProfile, bool) {
+	var profile UserProfile
+	var err error
+	profile, err = ath.Auth.Authenticate(r)
+	if err != nil {
+		ath.unauthorizedError(w, r)
+		return profile, false
+	}
+
+	return profile, true
 }
 
 func (ath *aiTutorHandler) authorizeManageAgent(w http.ResponseWriter, r *http.Request, profile UserProfile) bool {
@@ -97,29 +122,31 @@ func (ath *aiTutorHandler) authorizeManageAgent(w http.ResponseWriter, r *http.R
 	return true
 }
 
-func (ath *aiTutorHandler) fetchAgent(w http.ResponseWriter, r *http.Request, profile UserProfile) (database.GetAgentFullRow, bool) {
+func (ath *aiTutorHandler) authorizeStartedConversation(w http.ResponseWriter, r *http.Request, profile UserProfile) bool {
+	conversationId := r.Context().Value(idKey).(idType)
 
-	agentId := r.Context().Value(idKey).(idType)
-
-	agent, err := ath.Db.GetAgentFull(r.Context(), int32(agentId))
-	if err != nil {
-		ath.notFoundError(w, r)
-		return agent, false
+	if hasPermission, err := ath.Db.StartedConversation(r.Context(), database.StartedConversationParams{
+		ConversationID: int32(conversationId),
+		UserID:         profile.UserId,
+	}); err != nil || !hasPermission {
+		ath.forbiddenError(w, r)
+		return false
 	}
 
-	return agent, true
+	return true
 }
 
-func (ath *aiTutorHandler) authenticate(w http.ResponseWriter, r *http.Request) (UserProfile, bool) {
-	var profile UserProfile
-	var err error
-	profile, err = ath.Auth.Authenticate(r)
-	if err != nil {
-		ath.unauthorizedError(w, r)
-		return profile, false
+func (ath *aiTutorHandler) setId(pathParamName string) setContextFunction {
+	return func(w http.ResponseWriter, r *http.Request) bool {
+		id, err := strconv.ParseInt(r.PathValue(pathParamName), 10, 64)
+		if err != nil {
+			ath.notFoundError(w, r)
+			return false
+		}
+		(*r) = *r.WithContext(context.WithValue(r.Context(), idKey, idType(id)))
+		return true
 	}
 
-	return profile, true
 }
 
 func (ath *aiTutorHandler) unauthorizedError(w http.ResponseWriter, _ *http.Request) {

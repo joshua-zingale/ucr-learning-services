@@ -23,3 +23,18 @@ SELECT EXISTS (
 select conversation_id, name
 from conversations
 where user_id = $1;
+
+
+-- name: GetConversationMessages :many
+select m.message_id, m.content, m.sent_at, m.author_type, m.agent_id, m.user_id
+from messages as m
+where m.conversation_id = $1
+order by m.sent_at desc, m.message_id asc;
+
+
+-- name: StartedConversation :one
+select exists (
+    select 1
+    from conversations
+    where conversation_id = $1 AND user_id = $2
+);
