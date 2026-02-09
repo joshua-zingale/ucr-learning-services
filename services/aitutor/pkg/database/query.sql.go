@@ -39,7 +39,7 @@ order by m.sent_at desc, m.message_id asc
 
 type GetConversationMessagesRow struct {
 	MessageID  int32           `json:"messageId"`
-	Content    sql.NullString  `json:"content"`
+	Content    string          `json:"content"`
 	SentAt     sql.NullTime    `json:"sentAt"`
 	AuthorType NullMessageType `json:"authorType"`
 	AgentID    sql.NullInt32   `json:"agentId"`

@@ -34,7 +34,7 @@ create table conversations (
 create table messages (
     message_id serial primary key,
     conversation_id int not null references conversations(conversation_id) on delete cascade,
-    content text,
+    content text not null,
     sent_at timestamp default NOW(),
 
     author_type message_type,

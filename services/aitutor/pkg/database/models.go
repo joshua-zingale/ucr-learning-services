@@ -119,7 +119,7 @@ type GroupAgentPermission struct {
 type Message struct {
 	MessageID      int32           `json:"messageId"`
 	ConversationID int32           `json:"conversationId"`
-	Content        sql.NullString  `json:"content"`
+	Content        string          `json:"content"`
 	SentAt         sql.NullTime    `json:"sentAt"`
 	AuthorType     NullMessageType `json:"authorType"`
 	AgentID        sql.NullInt32   `json:"agentId"`
