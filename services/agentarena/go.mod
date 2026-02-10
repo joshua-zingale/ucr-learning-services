@@ -1,4 +1,4 @@
-module github.com/joshua-zingale/ucr-learning-services/services/aitutor
+module github.com/joshua-zingale/ucr-learning-services/services/agentarena
 
 go 1.25.0
 

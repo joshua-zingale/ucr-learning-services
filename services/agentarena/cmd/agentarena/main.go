@@ -7,11 +7,11 @@ import (
 	"net/http"
 
 	"github.com/jackc/pgx/v4/pgxpool"
-	"github.com/joshua-zingale/ucr-learning-services/services/aitutor/pkg/agentclass"
-	"github.com/joshua-zingale/ucr-learning-services/services/aitutor/pkg/agentregistry"
-	"github.com/joshua-zingale/ucr-learning-services/services/aitutor/pkg/aitutormux"
-	"github.com/joshua-zingale/ucr-learning-services/services/aitutor/pkg/auth"
-	"github.com/joshua-zingale/ucr-learning-services/services/aitutor/pkg/database"
+	"github.com/joshua-zingale/ucr-learning-services/services/agentarena/pkg/agentclass"
+	"github.com/joshua-zingale/ucr-learning-services/services/agentarena/pkg/agentmux"
+	"github.com/joshua-zingale/ucr-learning-services/services/agentarena/pkg/agentregistry"
+	"github.com/joshua-zingale/ucr-learning-services/services/agentarena/pkg/auth"
+	"github.com/joshua-zingale/ucr-learning-services/services/agentarena/pkg/database"
 )
 
 func main() {
@@ -23,7 +23,7 @@ func main() {
 		"",
 		"localhost",
 		"5432",
-		"aitutor_go"))
+		"agentarena"))
 	if err != nil {
 		log.Fatalf("Failed to establish connection to database: %s", err.Error())
 	}
@@ -31,7 +31,7 @@ func main() {
 	db := *database.New(pool)
 
 	agentClassDriverRegistry, err := agentregistry.New(ctx,
-		map[string]aitutormux.AgentClassDriver{
+		map[string]agentmux.AgentClassDriver{
 			"standard": &agentclass.StandardAgentDriver{},
 		},
 		db.GetAgentClassIdFromSlug)
@@ -39,10 +39,10 @@ func main() {
 		log.Fatalf("Failed to initialize agent class drivers: %s", err.Error())
 	}
 
-	handler := aitutormux.NewAiTutorMux(&aitutormux.AiTutorConfig{
+	handler := agentmux.NewAiTutorMux(&agentmux.AgentArenaConfig{
 		Db:                       db,
 		Auth:                     auth.TaxisAuth{},
-		AgentClassDriverRegistry: aitutormux.AgentClassDriverRegistry(agentClassDriverRegistry),
+		AgentClassDriverRegistry: agentmux.AgentClassDriverRegistry(agentClassDriverRegistry),
 	})
 
 	http.ListenAndServe("localhost:7654", handler)

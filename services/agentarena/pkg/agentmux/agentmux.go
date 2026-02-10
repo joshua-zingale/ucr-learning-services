@@ -1,4 +1,4 @@
-package aitutormux
+package agentmux
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/joshua-zingale/ucr-learning-services/services/aitutor/pkg/database"
+	"github.com/joshua-zingale/ucr-learning-services/services/agentarena/pkg/database"
 )
 
 type AuthService interface {
@@ -34,14 +34,14 @@ type AgentClassDriverRegistry interface {
 	GetFromSlug(slug string) (AgentClassDriver, bool)
 }
 
-type AiTutorConfig struct {
+type AgentArenaConfig struct {
 	Db                       database.Queries
 	Auth                     AuthService
 	AgentClassDriverRegistry AgentClassDriverRegistry
 }
 
-type aiTutorHandler struct {
-	*AiTutorConfig
+type agentArenaHandler struct {
+	*AgentArenaConfig
 }
 
 type contextKey int
@@ -58,15 +58,15 @@ type authzFunction[AuthData any] func(w http.ResponseWriter, r *http.Request, au
 type fetchFunction[AuthData any, Data any] func(w http.ResponseWriter, r *http.Request, data AuthData) (Data, bool)
 type renderFunction[Data any] func(w http.ResponseWriter, r *http.Request, data Data)
 
-func NewAiTutorMux(config *AiTutorConfig) http.Handler {
+func NewAiTutorMux(config *AgentArenaConfig) http.Handler {
 	if config == nil {
 		panic("config cannot be nil")
 	}
 
 	mux := http.NewServeMux()
 
-	h := aiTutorHandler{
-		AiTutorConfig: config,
+	h := agentArenaHandler{
+		AgentArenaConfig: config,
 	}
 
 	mux.HandleFunc("GET /api/agents/{agentId}", buildRoute(h.setId("agentId"), h.authenticate, h.authorizeManageAgent, h.fetchAgent, renderJson))
@@ -76,7 +76,7 @@ func NewAiTutorMux(config *AiTutorConfig) http.Handler {
 	return mux
 }
 
-func (ath *aiTutorHandler) fetchConversations(w http.ResponseWriter, r *http.Request, profile UserProfile) ([]database.GetConversationsRow, bool) {
+func (ath *agentArenaHandler) fetchConversations(w http.ResponseWriter, r *http.Request, profile UserProfile) ([]database.GetConversationsRow, bool) {
 	conversations, err := ath.Db.GetConversations(r.Context(), profile.UserId)
 	if err != nil {
 		ath.internalError(w, r)
@@ -85,7 +85,7 @@ func (ath *aiTutorHandler) fetchConversations(w http.ResponseWriter, r *http.Req
 	return conversations, true
 }
 
-func (ath *aiTutorHandler) fetchAgent(w http.ResponseWriter, r *http.Request, profile UserProfile) (database.GetAgentFullRow, bool) {
+func (ath *agentArenaHandler) fetchAgent(w http.ResponseWriter, r *http.Request, profile UserProfile) (database.GetAgentFullRow, bool) {
 
 	agentId := r.Context().Value(idKey).(idType)
 
@@ -98,7 +98,7 @@ func (ath *aiTutorHandler) fetchAgent(w http.ResponseWriter, r *http.Request, pr
 	return agent, true
 }
 
-func (ath *aiTutorHandler) fetchConversationMessages(w http.ResponseWriter, r *http.Request, _ UserProfile) ([]database.GetConversationMessagesRow, bool) {
+func (ath *agentArenaHandler) fetchConversationMessages(w http.ResponseWriter, r *http.Request, _ UserProfile) ([]database.GetConversationMessagesRow, bool) {
 	conversationId := r.Context().Value(idKey).(idType)
 
 	messages, err := ath.Db.GetConversationMessages(r.Context(), int32(conversationId))
@@ -110,7 +110,7 @@ func (ath *aiTutorHandler) fetchConversationMessages(w http.ResponseWriter, r *h
 	return messages, true
 }
 
-func (ath *aiTutorHandler) authenticate(w http.ResponseWriter, r *http.Request) (UserProfile, bool) {
+func (ath *agentArenaHandler) authenticate(w http.ResponseWriter, r *http.Request) (UserProfile, bool) {
 	var profile UserProfile
 	var err error
 	profile, err = ath.Auth.Authenticate(r)
@@ -122,7 +122,7 @@ func (ath *aiTutorHandler) authenticate(w http.ResponseWriter, r *http.Request) 
 	return profile, true
 }
 
-func (ath *aiTutorHandler) authorizeManageAgent(w http.ResponseWriter, r *http.Request, profile UserProfile) bool {
+func (ath *agentArenaHandler) authorizeManageAgent(w http.ResponseWriter, r *http.Request, profile UserProfile) bool {
 	agentId := r.Context().Value(idKey).(idType)
 
 	if hasPermission, err := ath.Db.HasAgentPermission(r.Context(), database.HasAgentPermissionParams{
@@ -138,7 +138,7 @@ func (ath *aiTutorHandler) authorizeManageAgent(w http.ResponseWriter, r *http.R
 	return true
 }
 
-func (ath *aiTutorHandler) authorizeStartedConversation(w http.ResponseWriter, r *http.Request, profile UserProfile) bool {
+func (ath *agentArenaHandler) authorizeStartedConversation(w http.ResponseWriter, r *http.Request, profile UserProfile) bool {
 	conversationId := r.Context().Value(idKey).(idType)
 
 	if hasPermission, err := ath.Db.StartedConversation(r.Context(), database.StartedConversationParams{
@@ -152,7 +152,7 @@ func (ath *aiTutorHandler) authorizeStartedConversation(w http.ResponseWriter, r
 	return true
 }
 
-func (ath *aiTutorHandler) setId(pathParamName string) setContextFunction {
+func (ath *agentArenaHandler) setId(pathParamName string) setContextFunction {
 	return func(w http.ResponseWriter, r *http.Request) bool {
 		id, err := strconv.ParseInt(r.PathValue(pathParamName), 10, 64)
 		if err != nil {
@@ -165,19 +165,19 @@ func (ath *aiTutorHandler) setId(pathParamName string) setContextFunction {
 
 }
 
-func (ath *aiTutorHandler) unauthorizedError(w http.ResponseWriter, _ *http.Request) {
+func (ath *agentArenaHandler) unauthorizedError(w http.ResponseWriter, _ *http.Request) {
 	http.Error(w, "Unauthorized", http.StatusUnauthorized)
 }
 
-func (ath *aiTutorHandler) forbiddenError(w http.ResponseWriter, _ *http.Request) {
+func (ath *agentArenaHandler) forbiddenError(w http.ResponseWriter, _ *http.Request) {
 	http.Error(w, "Forbidden", http.StatusForbidden)
 }
 
-func (ath *aiTutorHandler) notFoundError(w http.ResponseWriter, _ *http.Request) {
+func (ath *agentArenaHandler) notFoundError(w http.ResponseWriter, _ *http.Request) {
 	http.Error(w, "Not Found", http.StatusNotFound)
 }
 
-func (ath *aiTutorHandler) internalError(w http.ResponseWriter, _ *http.Request) {
+func (ath *agentArenaHandler) internalError(w http.ResponseWriter, _ *http.Request) {
 	http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 }
 

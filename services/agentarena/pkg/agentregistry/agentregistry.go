@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/joshua-zingale/ucr-learning-services/services/aitutor/pkg/aitutormux"
+	"github.com/joshua-zingale/ucr-learning-services/services/agentarena/pkg/agentmux"
 	"golang.org/x/exp/constraints"
 )
 
@@ -14,16 +14,16 @@ type integer interface {
 }
 
 type AgentClassDriverRegistry[T integer] struct {
-	drivers  map[T]aitutormux.AgentClassDriver
+	drivers  map[T]agentmux.AgentClassDriver
 	slugToId map[string]T
 }
 
-func (acdr *AgentClassDriverRegistry[T]) GetFromId(id T) (aitutormux.AgentClassDriver, bool) {
+func (acdr *AgentClassDriverRegistry[T]) GetFromId(id T) (agentmux.AgentClassDriver, bool) {
 	driver, ok := acdr.drivers[id]
 	return driver, ok
 }
 
-func (acdr *AgentClassDriverRegistry[T]) GetFromSlug(slug string) (aitutormux.AgentClassDriver, bool) {
+func (acdr *AgentClassDriverRegistry[T]) GetFromSlug(slug string) (agentmux.AgentClassDriver, bool) {
 	id, ok := acdr.slugToId[slug]
 	if !ok {
 		return nil, false
@@ -31,7 +31,7 @@ func (acdr *AgentClassDriverRegistry[T]) GetFromSlug(slug string) (aitutormux.Ag
 	return acdr.GetFromId(id)
 }
 
-func (acdr *AgentClassDriverRegistry[T]) Register(id T, slug string, agentClass aitutormux.AgentClassDriver) error {
+func (acdr *AgentClassDriverRegistry[T]) Register(id T, slug string, agentClass agentmux.AgentClassDriver) error {
 	if _, ok := acdr.drivers[id]; ok {
 		return fmt.Errorf("duplicate agent class id, '%d'", id)
 	}
@@ -45,9 +45,9 @@ func (acdr *AgentClassDriverRegistry[T]) Register(id T, slug string, agentClass 
 	return nil
 }
 
-func New[T integer](ctx context.Context, slugToDriver map[string]aitutormux.AgentClassDriver, getIdFromSlug func(context.Context, string) (T, error)) (*AgentClassDriverRegistry[T], error) {
+func New[T integer](ctx context.Context, slugToDriver map[string]agentmux.AgentClassDriver, getIdFromSlug func(context.Context, string) (T, error)) (*AgentClassDriverRegistry[T], error) {
 	acdr := AgentClassDriverRegistry[T]{
-		drivers:  map[T]aitutormux.AgentClassDriver{},
+		drivers:  map[T]agentmux.AgentClassDriver{},
 		slugToId: map[string]T{},
 	}
 
