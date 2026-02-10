@@ -8,25 +8,67 @@ package database
 import (
 	"context"
 	"database/sql"
+
+	"github.com/jackc/pgtype"
 )
 
+const getAgentClassFromSlug = `-- name: GetAgentClassFromSlug :one
+select agent_class_id, name, config_schema
+from agent_classes
+where slug = $1
+limit 1
+`
+
+type GetAgentClassFromSlugRow struct {
+	AgentClassID int32        `json:"agentClassId"`
+	Name         string       `json:"name"`
+	ConfigSchema pgtype.JSONB `json:"configSchema"`
+}
+
+func (q *Queries) GetAgentClassFromSlug(ctx context.Context, slug string) (GetAgentClassFromSlugRow, error) {
+	row := q.db.QueryRow(ctx, getAgentClassFromSlug, slug)
+	var i GetAgentClassFromSlugRow
+	err := row.Scan(&i.AgentClassID, &i.Name, &i.ConfigSchema)
+	return i, err
+}
+
+const getAgentClassIdFromSlug = `-- name: GetAgentClassIdFromSlug :one
+select agent_class_id
+from agent_classes
+where slug = $1
+limit 1
+`
+
+func (q *Queries) GetAgentClassIdFromSlug(ctx context.Context, slug string) (int32, error) {
+	row := q.db.QueryRow(ctx, getAgentClassIdFromSlug, slug)
+	var agent_class_id int32
+	err := row.Scan(&agent_class_id)
+	return agent_class_id, err
+}
+
 const getAgentFull = `-- name: GetAgentFull :one
-select agents.agent_id, agents.name, agent_configs.system_prompt
-from agents join agent_configs on agents.agent_id = agent_configs.agent_id
+select agents.agent_id, agents.name, agents.agent_class_id, agents.config
+from agents
 where agents.agent_id=$1
 limit 1
 `
 
 type GetAgentFullRow struct {
-	AgentID      int32  `json:"agentId"`
-	Name         string `json:"name"`
-	SystemPrompt string `json:"systemPrompt"`
+	AgentID      int32        `json:"agentId"`
+	Name         string       `json:"name"`
+	AgentClassID int32        `json:"agentClassId"`
+	Config       pgtype.JSONB `json:"config"`
 }
 
 func (q *Queries) GetAgentFull(ctx context.Context, agentID int32) (GetAgentFullRow, error) {
 	row := q.db.QueryRow(ctx, getAgentFull, agentID)
 	var i GetAgentFullRow
-	err := row.Scan(&i.AgentID, &i.Name, &i.SystemPrompt)
+	err := row.Scan(
+		&i.AgentID,
+		&i.Name,
+		&i.AgentClassID,
+		&i.Config,
+	)
 	return i, err
 }
 

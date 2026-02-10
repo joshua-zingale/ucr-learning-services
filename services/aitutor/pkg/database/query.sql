@@ -1,6 +1,18 @@
+-- name: GetAgentClassFromSlug :one
+select agent_class_id, name, config_schema
+from agent_classes
+where slug = $1
+limit 1;
+
+-- name: GetAgentClassIdFromSlug :one
+select agent_class_id
+from agent_classes
+where slug = $1
+limit 1;
+
 -- name: GetAgentFull :one
-select agents.agent_id, agents.name, agent_configs.system_prompt
-from agents join agent_configs on agents.agent_id = agent_configs.agent_id
+select agents.agent_id, agents.name, agents.agent_class_id, agents.config
+from agents
 where agents.agent_id=$1
 limit 1;
 

@@ -19,9 +19,25 @@ type UserProfile struct {
 	UserGroups []string
 }
 
+type ChatMessage struct {
+	Sender  database.MessageType
+	Content string
+}
+
+// Defines functionality for an AgentClass
+type AgentClassDriver interface {
+	Generate(ctx context.Context, config []byte, messages []ChatMessage) (string, error)
+}
+
+type AgentClassDriverRegistry interface {
+	GetFromId(id int32) (AgentClassDriver, bool)
+	GetFromSlug(slug string) (AgentClassDriver, bool)
+}
+
 type AiTutorConfig struct {
-	Db   database.Queries
-	Auth AuthService
+	Db                       database.Queries
+	Auth                     AuthService
+	AgentClassDriverRegistry AgentClassDriverRegistry
 }
 
 type aiTutorHandler struct {

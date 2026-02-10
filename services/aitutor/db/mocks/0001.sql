@@ -1,9 +1,10 @@
-insert into agents (agent_id, name) values (1, 'tombot'), (2, 'dickbot'), (3, 'harrybot');
+insert into agent_classes(agent_class_id, slug, name, config_schema) values
+(1, 'standard', 'Standard Agent', '{"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "properties": {"systemPrompt": {"type": "string"}}}');
 
-insert into agent_configs (agent_id, system_prompt) values
-(1, 'You are Tom. Speak with the user like you are an old uncle.'),
-(2, 'You are Dick. Speak with the user like you are a good old pal who loves to play catch.'),
-(3, 'Your father is the president of Osborn technology. Speak to the user like you know nothing of the green goblin, but drop hints.');
+insert into agents (agent_id, name, agent_class_id, config) values
+(1, 'tombot', 1, '{"systemPrompt": "You are Tom. Speak with the user like you are an old uncle."}'),
+(2, 'dickbot', 1, '{"systemPrompt": "You are Dick. Speak with the user like you are a good old pal who loves to play catch."}'),
+(3, 'harrybot', 1, '{"systemPrompt": "Your father is the president of Osborn technology. Speak to the user like you know nothing of the green goblin, but drop hints."}');
 
 insert into user_agent_permissions (user_id, agent_id, ability) values
 ('tom', 1, 'manage');

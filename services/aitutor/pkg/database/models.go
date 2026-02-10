@@ -8,6 +8,8 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"fmt"
+
+	"github.com/jackc/pgtype"
 )
 
 type AgentAbilityType string
@@ -95,13 +97,18 @@ func (ns NullMessageType) Value() (driver.Value, error) {
 }
 
 type Agent struct {
-	AgentID int32  `json:"agentId"`
-	Name    string `json:"name"`
+	AgentID      int32        `json:"agentId"`
+	Name         string       `json:"name"`
+	AgentClassID int32        `json:"agentClassId"`
+	Config       pgtype.JSONB `json:"config"`
+	CreatedAt    sql.NullTime `json:"createdAt"`
 }
 
-type AgentConfig struct {
-	AgentID      int32  `json:"agentId"`
-	SystemPrompt string `json:"systemPrompt"`
+type AgentClass struct {
+	AgentClassID int32        `json:"agentClassId"`
+	Slug         string       `json:"slug"`
+	Name         string       `json:"name"`
+	ConfigSchema pgtype.JSONB `json:"configSchema"`
 }
 
 type Conversation struct {
