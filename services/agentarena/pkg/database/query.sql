@@ -4,6 +4,14 @@ from agent_classes
 where slug = $1
 limit 1;
 
+-- name: GetAgentConfigFromConversationId :one
+select a.config, a.agent_id, a.agent_class_id
+from agents as a join conversations as c
+    on a.agent_id = c.active_agent_id
+where c.conversation_id = $1
+limit 1;
+
+
 -- name: GetAgentClassIdFromSlug :one
 select agent_class_id
 from agent_classes
@@ -38,10 +46,16 @@ where user_id = $1;
 
 
 -- name: GetConversationMessages :many
-select m.message_id, m.content, m.sent_at, m.author_type, m.agent_id, m.user_id
+select m.message_id, m.content, m.sent_at, m.message_type, m.agent_id, m.user_id
 from messages as m
 where m.conversation_id = $1
 order by m.sent_at desc, m.message_id asc;
+
+
+-- name: PostMessageToConversation :one
+insert into messages (conversation_id, content, message_type, agent_id, user_id) values
+(@conversation_id, @content, @message_type, @agent_id, @user_id)
+returning message_id as message_id, content as content;
 
 
 -- name: StartedConversation :one

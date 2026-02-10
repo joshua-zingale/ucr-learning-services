@@ -112,9 +112,10 @@ type AgentClass struct {
 }
 
 type Conversation struct {
-	ConversationID int32  `json:"conversationId"`
-	UserID         string `json:"userId"`
-	Name           string `json:"name"`
+	ConversationID int32         `json:"conversationId"`
+	UserID         string        `json:"userId"`
+	Name           string        `json:"name"`
+	ActiveAgentID  sql.NullInt32 `json:"activeAgentId"`
 }
 
 type GroupAgentPermission struct {
@@ -124,13 +125,13 @@ type GroupAgentPermission struct {
 }
 
 type Message struct {
-	MessageID      int32           `json:"messageId"`
-	ConversationID int32           `json:"conversationId"`
-	Content        string          `json:"content"`
-	SentAt         sql.NullTime    `json:"sentAt"`
-	AuthorType     NullMessageType `json:"authorType"`
-	AgentID        sql.NullInt32   `json:"agentId"`
-	UserID         sql.NullString  `json:"userId"`
+	MessageID      int32          `json:"messageId"`
+	ConversationID int32          `json:"conversationId"`
+	Content        string         `json:"content"`
+	SentAt         sql.NullTime   `json:"sentAt"`
+	MessageType    MessageType    `json:"messageType"`
+	AgentID        sql.NullInt32  `json:"agentId"`
+	UserID         sql.NullString `json:"userId"`
 }
 
 type UserAgentPermission struct {

@@ -46,6 +46,27 @@ func (q *Queries) GetAgentClassIdFromSlug(ctx context.Context, slug string) (int
 	return agent_class_id, err
 }
 
+const getAgentConfigFromConversationId = `-- name: GetAgentConfigFromConversationId :one
+select a.config, a.agent_id, a.agent_class_id
+from agents as a join conversations as c
+    on a.agent_id = c.active_agent_id
+where c.conversation_id = $1
+limit 1
+`
+
+type GetAgentConfigFromConversationIdRow struct {
+	Config       pgtype.JSONB `json:"config"`
+	AgentID      int32        `json:"agentId"`
+	AgentClassID int32        `json:"agentClassId"`
+}
+
+func (q *Queries) GetAgentConfigFromConversationId(ctx context.Context, conversationID int32) (GetAgentConfigFromConversationIdRow, error) {
+	row := q.db.QueryRow(ctx, getAgentConfigFromConversationId, conversationID)
+	var i GetAgentConfigFromConversationIdRow
+	err := row.Scan(&i.Config, &i.AgentID, &i.AgentClassID)
+	return i, err
+}
+
 const getAgentFull = `-- name: GetAgentFull :one
 select agents.agent_id, agents.name, agents.agent_class_id, agents.config
 from agents
@@ -73,19 +94,19 @@ func (q *Queries) GetAgentFull(ctx context.Context, agentID int32) (GetAgentFull
 }
 
 const getConversationMessages = `-- name: GetConversationMessages :many
-select m.message_id, m.content, m.sent_at, m.author_type, m.agent_id, m.user_id
+select m.message_id, m.content, m.sent_at, m.message_type, m.agent_id, m.user_id
 from messages as m
 where m.conversation_id = $1
 order by m.sent_at desc, m.message_id asc
 `
 
 type GetConversationMessagesRow struct {
-	MessageID  int32           `json:"messageId"`
-	Content    string          `json:"content"`
-	SentAt     sql.NullTime    `json:"sentAt"`
-	AuthorType NullMessageType `json:"authorType"`
-	AgentID    sql.NullInt32   `json:"agentId"`
-	UserID     sql.NullString  `json:"userId"`
+	MessageID   int32          `json:"messageId"`
+	Content     string         `json:"content"`
+	SentAt      sql.NullTime   `json:"sentAt"`
+	MessageType MessageType    `json:"messageType"`
+	AgentID     sql.NullInt32  `json:"agentId"`
+	UserID      sql.NullString `json:"userId"`
 }
 
 func (q *Queries) GetConversationMessages(ctx context.Context, conversationID int32) ([]GetConversationMessagesRow, error) {
@@ -101,7 +122,7 @@ func (q *Queries) GetConversationMessages(ctx context.Context, conversationID in
 			&i.MessageID,
 			&i.Content,
 			&i.SentAt,
-			&i.AuthorType,
+			&i.MessageType,
 			&i.AgentID,
 			&i.UserID,
 		); err != nil {
@@ -179,6 +200,38 @@ func (q *Queries) HasAgentPermission(ctx context.Context, arg HasAgentPermission
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const postMessageToConversation = `-- name: PostMessageToConversation :one
+insert into messages (conversation_id, content, message_type, agent_id, user_id) values
+($1, $2, $3, $4, $5)
+returning message_id as message_id, content as content
+`
+
+type PostMessageToConversationParams struct {
+	ConversationID int32          `json:"conversationId"`
+	Content        string         `json:"content"`
+	MessageType    MessageType    `json:"messageType"`
+	AgentID        sql.NullInt32  `json:"agentId"`
+	UserID         sql.NullString `json:"userId"`
+}
+
+type PostMessageToConversationRow struct {
+	MessageID int32  `json:"messageId"`
+	Content   string `json:"content"`
+}
+
+func (q *Queries) PostMessageToConversation(ctx context.Context, arg PostMessageToConversationParams) (PostMessageToConversationRow, error) {
+	row := q.db.QueryRow(ctx, postMessageToConversation,
+		arg.ConversationID,
+		arg.Content,
+		arg.MessageType,
+		arg.AgentID,
+		arg.UserID,
+	)
+	var i PostMessageToConversationRow
+	err := row.Scan(&i.MessageID, &i.Content)
+	return i, err
 }
 
 const startedConversation = `-- name: StartedConversation :one

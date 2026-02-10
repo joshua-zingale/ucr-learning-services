@@ -36,7 +36,8 @@ create table group_agent_permissions (
 create table conversations (
     conversation_id serial primary key,
     user_id varchar(32) not null,
-    name varchar(32) not null
+    name varchar(32) not null,
+    active_agent_id int references agents(agent_id)
 );
 
 create table messages (
@@ -45,11 +46,11 @@ create table messages (
     content text not null,
     sent_at timestamptz default NOW(),
 
-    author_type message_type,
+    message_type message_type not null,
     agent_id int references agents(agent_id),
     user_id varchar(32),
     check (
-        (author_type = 'agent' AND agent_id is not null AND user_id is null)
+        (message_type = 'agent' AND agent_id is not null AND user_id is null)
         OR
-        (author_type = 'user' AND user_id is not null AND agent_id is null))
+        (message_type = 'user' AND user_id is not null AND agent_id is null))
 );

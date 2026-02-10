@@ -2,12 +2,16 @@ package agentmux
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"github.com/joshua-zingale/ucr-learning-services/services/agentarena/pkg/database"
+	"github.com/joshua-zingale/ucr-learning-services/services/agentarena/pkg/functools"
 )
 
 type AuthService interface {
@@ -20,8 +24,8 @@ type UserProfile struct {
 }
 
 type ChatMessage struct {
-	Sender  database.MessageType
-	Content string
+	MessageType database.MessageType
+	Content     string
 }
 
 // Defines functionality for an AgentClass
@@ -55,7 +59,7 @@ const (
 type setContextFunction func(w http.ResponseWriter, r *http.Request) bool
 type authFunction[AuthData any] func(w http.ResponseWriter, r *http.Request) (AuthData, bool)
 type authzFunction[AuthData any] func(w http.ResponseWriter, r *http.Request, authData AuthData) bool
-type fetchFunction[AuthData any, Data any] func(w http.ResponseWriter, r *http.Request, data AuthData) (Data, bool)
+type actionFunction[AuthData any, Data any] func(w http.ResponseWriter, r *http.Request, data AuthData) (Data, bool)
 type renderFunction[Data any] func(w http.ResponseWriter, r *http.Request, data Data)
 
 func NewAiTutorMux(config *AgentArenaConfig) http.Handler {
@@ -72,6 +76,7 @@ func NewAiTutorMux(config *AgentArenaConfig) http.Handler {
 	mux.HandleFunc("GET /api/agents/{agentId}", buildRoute(h.setId("agentId"), h.authenticate, h.authorizeManageAgent, h.fetchAgent, renderJson))
 	mux.HandleFunc("GET /api/conversations", buildRoute(nil, h.authenticate, nil, h.fetchConversations, renderJson))
 	mux.HandleFunc("GET /api/conversations/{conversationId}/messages", buildRoute(h.setId("conversationId"), h.authenticate, h.authorizeStartedConversation, h.fetchConversationMessages, renderJson))
+	mux.HandleFunc("POST /api/conversations/{conversationId}/agent-messages", buildRoute(h.setId("conversationId"), h.authenticate, h.authorizeStartedConversation, h.createAgentMessage, renderJson))
 
 	return mux
 }
@@ -79,7 +84,7 @@ func NewAiTutorMux(config *AgentArenaConfig) http.Handler {
 func (ath *agentArenaHandler) fetchConversations(w http.ResponseWriter, r *http.Request, profile UserProfile) ([]database.GetConversationsRow, bool) {
 	conversations, err := ath.Db.GetConversations(r.Context(), profile.UserId)
 	if err != nil {
-		ath.internalError(w, r)
+		ath.internalError(w, r, err)
 		return nil, false
 	}
 	return conversations, true
@@ -103,11 +108,60 @@ func (ath *agentArenaHandler) fetchConversationMessages(w http.ResponseWriter, r
 
 	messages, err := ath.Db.GetConversationMessages(r.Context(), int32(conversationId))
 	if err != nil {
-		ath.internalError(w, r)
+		ath.internalError(w, r, err)
 		return messages, false
 	}
 
 	return messages, true
+}
+
+func (ath *agentArenaHandler) createAgentMessage(w http.ResponseWriter, r *http.Request, _ UserProfile) (database.PostMessageToConversationRow, bool) {
+	conversationId := r.Context().Value(idKey).(idType)
+	var newAgentMessage database.PostMessageToConversationRow
+
+	agentConfig, err := ath.Db.GetAgentConfigFromConversationId(r.Context(), int32(conversationId))
+	if err != nil {
+		ath.internalError(w, r, fmt.Errorf("getting config %d %w", conversationId, err))
+		return newAgentMessage, false
+	}
+
+	agentDriver, ok := ath.AgentClassDriverRegistry.GetFromId(agentConfig.AgentClassID)
+	if !ok {
+		ath.internalError(w, r, fmt.Errorf("getting agent driver %w", err))
+		return newAgentMessage, false
+	}
+
+	messages, err := ath.Db.GetConversationMessages(r.Context(), int32(conversationId))
+	if err != nil {
+		ath.internalError(w, r, fmt.Errorf("getting conversation messages %w", err))
+		return newAgentMessage, false
+	}
+
+	chatMessages := functools.Map(messages, func(m database.GetConversationMessagesRow) ChatMessage {
+		return ChatMessage{
+			MessageType: m.MessageType,
+			Content:     m.Content,
+		}
+	})
+	agentMessageContent, err := agentDriver.Generate(r.Context(), agentConfig.Config.Bytes, chatMessages)
+	if err != nil {
+		ath.internalError(w, r, err)
+		return newAgentMessage, false
+	}
+
+	agentMessage, err := ath.Db.PostMessageToConversation(r.Context(), database.PostMessageToConversationParams{
+		ConversationID: int32(conversationId),
+		Content:        agentMessageContent,
+		MessageType:    database.MessageTypeAgent,
+		AgentID:        sql.NullInt32{Int32: agentConfig.AgentID, Valid: true},
+	})
+
+	if err != nil {
+		ath.internalError(w, r, err)
+		return agentMessage, false
+	}
+
+	return agentMessage, true
 }
 
 func (ath *agentArenaHandler) authenticate(w http.ResponseWriter, r *http.Request) (UserProfile, bool) {
@@ -177,7 +231,8 @@ func (ath *agentArenaHandler) notFoundError(w http.ResponseWriter, _ *http.Reque
 	http.Error(w, "Not Found", http.StatusNotFound)
 }
 
-func (ath *agentArenaHandler) internalError(w http.ResponseWriter, _ *http.Request) {
+func (ath *agentArenaHandler) internalError(w http.ResponseWriter, _ *http.Request, err error) {
+	log.Printf("Internal Server Error: %s", err.Error())
 	http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 }
 
@@ -199,7 +254,7 @@ func respondJson[T any](w http.ResponseWriter, v T) {
 	enc.Encode(v)
 }
 
-func buildRoute[AuthData, Data any](contextFunction setContextFunction, auth authFunction[AuthData], authz authzFunction[AuthData], fetch fetchFunction[AuthData, Data], render renderFunction[Data]) http.HandlerFunc {
+func buildRoute[AuthData, Data any](contextFunction setContextFunction, auth authFunction[AuthData], authz authzFunction[AuthData], fetch actionFunction[AuthData, Data], render renderFunction[Data]) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if contextFunction != nil && !contextFunction(w, r) {
 			return
