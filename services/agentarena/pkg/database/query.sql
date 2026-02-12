@@ -49,7 +49,7 @@ where user_id = $1;
 select m.message_id, m.content, m.sent_at, m.message_type, m.agent_id, m.user_id
 from messages as m
 where m.conversation_id = $1
-order by m.sent_at desc, m.message_id asc;
+order by m.sent_at asc, m.message_id asc;
 
 
 -- name: PostMessageToConversation :one
