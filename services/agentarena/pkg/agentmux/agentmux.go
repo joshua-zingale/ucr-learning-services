@@ -9,9 +9,11 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"text/template"
 
 	"github.com/joshua-zingale/ucr-learning-services/services/agentarena/pkg/database"
 	"github.com/joshua-zingale/ucr-learning-services/services/agentarena/pkg/functools"
+	"github.com/joshua-zingale/ucr-learning-services/services/agentarena/pkg/templates"
 )
 
 type AuthService interface {
@@ -62,6 +64,8 @@ type authzFunction[AuthData any] func(w http.ResponseWriter, r *http.Request, au
 type actionFunction[AuthData any, Data any] func(w http.ResponseWriter, r *http.Request, data AuthData) (Data, bool)
 type renderFunction[Data any] func(w http.ResponseWriter, r *http.Request, data Data)
 
+var templ = templates.LoadTemplates()
+
 func NewAiTutorMux(config *AgentArenaConfig) http.Handler {
 	if config == nil {
 		panic("config cannot be nil")
@@ -72,6 +76,8 @@ func NewAiTutorMux(config *AgentArenaConfig) http.Handler {
 	h := agentArenaHandler{
 		AgentArenaConfig: config,
 	}
+
+	mux.HandleFunc("GET /conversations", buildRoute(nil, h.authenticate, nil, h.fetchConversations, renderTemplate[[]database.GetUserConversationsRow](templ, "conversations.html")))
 
 	mux.HandleFunc("GET /api/agents/{agentId}", buildRoute(h.setId("agentId"), h.authenticate, h.authorizeManageAgent, h.fetchAgent, renderJson))
 	mux.HandleFunc("GET /api/me/conversations", buildRoute(nil, h.authenticate, nil, h.fetchConversations, renderJson))
@@ -283,6 +289,17 @@ func renderJson[T any](w http.ResponseWriter, r *http.Request, data T) {
 		return
 	}
 	http.Error(w, "Not Acceptable: JSON", http.StatusNotAcceptable)
+}
+
+func renderTemplate[T any](tmpl *template.Template, name string) renderFunction[T] {
+	return func(w http.ResponseWriter, r *http.Request, data T) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		err := tmpl.ExecuteTemplate(w, name, data)
+		if err != nil {
+			http.Error(w, "Error rendering template", http.StatusInternalServerError)
+			return
+		}
+	}
 }
 
 func acceptsJson(r *http.Request) bool {
