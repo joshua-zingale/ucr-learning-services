@@ -81,8 +81,8 @@ func NewAiTutorMux(config *AgentArenaConfig) http.Handler {
 	return mux
 }
 
-func (ath *agentArenaHandler) fetchConversations(w http.ResponseWriter, r *http.Request, profile UserProfile) ([]database.GetConversationsRow, bool) {
-	conversations, err := ath.Db.GetConversations(r.Context(), profile.UserId)
+func (ath *agentArenaHandler) fetchConversations(w http.ResponseWriter, r *http.Request, profile UserProfile) ([]database.GetUserConversationsRow, bool) {
+	conversations, err := ath.Db.GetUserConversations(r.Context(), profile.UserId)
 	if err != nil {
 		ath.internalError(w, r, err)
 		return nil, false

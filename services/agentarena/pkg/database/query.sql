@@ -39,10 +39,13 @@ SELECT EXISTS (
       AND ability = @ability
 );
 
--- name: GetConversations :many
-select conversation_id, name
-from conversations
-where user_id = $1;
+-- name: GetUserConversations :many
+select c.conversation_id, c.name
+from conversations c
+left join messages m on c.conversation_id = m.conversation_id
+where c.user_id = $1
+group by c.conversation_id, c.name
+order by MAX(m.sent_at) desc nulls last;
 
 
 -- name: GetConversationMessages :many
