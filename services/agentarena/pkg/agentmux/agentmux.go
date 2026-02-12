@@ -76,7 +76,7 @@ func NewAiTutorMux(config *AgentArenaConfig) http.Handler {
 	mux.HandleFunc("GET /api/agents/{agentId}", buildRoute(h.setId("agentId"), h.authenticate, h.authorizeManageAgent, h.fetchAgent, renderJson))
 	mux.HandleFunc("GET /api/conversations", buildRoute(nil, h.authenticate, nil, h.fetchConversations, renderJson))
 	mux.HandleFunc("GET /api/conversations/{conversationId}/messages", buildRoute(h.setId("conversationId"), h.authenticate, h.authorizeStartedConversation, h.fetchConversationMessages, renderJson))
-	mux.HandleFunc("POST /api/conversations/{conversationId}/agent-messages", buildRoute(h.setId("conversationId"), h.authenticate, h.authorizeStartedConversation, h.createAgentMessage, renderJson))
+	mux.HandleFunc("POST /api/conversations/{conversationId}/messages", buildRoute(h.setId("conversationId"), h.authenticate, h.authorizeStartedConversation, h.createMessage, renderJson))
 
 	return mux
 }
@@ -115,53 +115,90 @@ func (ath *agentArenaHandler) fetchConversationMessages(w http.ResponseWriter, r
 	return messages, true
 }
 
-func (ath *agentArenaHandler) createAgentMessage(w http.ResponseWriter, r *http.Request, _ UserProfile) (database.PostMessageToConversationRow, bool) {
+type createMessageRequest struct {
+	MessageType database.MessageType `json:"messageType"`
+	Content     string               `json:"content,omitempty"`
+}
+
+func (ath *agentArenaHandler) createMessage(w http.ResponseWriter, r *http.Request, userProfile UserProfile) (database.PostMessageToConversationRow, bool) {
 	conversationId := r.Context().Value(idKey).(idType)
-	var newAgentMessage database.PostMessageToConversationRow
 
-	agentConfig, err := ath.Db.GetAgentConfigFromConversationId(r.Context(), int32(conversationId))
-	if err != nil {
-		ath.internalError(w, r, fmt.Errorf("getting config %d %w", conversationId, err))
-		return newAgentMessage, false
+	var newMessage database.PostMessageToConversationRow
+
+	var msgReq createMessageRequest
+	if err := json.NewDecoder(r.Body).Decode(&msgReq); err != nil {
+		ath.badRequest(w, r, "invalid json")
+		return newMessage, false
 	}
 
-	agentDriver, ok := ath.AgentClassDriverRegistry.GetFromId(agentConfig.AgentClassID)
-	if !ok {
-		ath.internalError(w, r, fmt.Errorf("getting agent driver %w", err))
-		return newAgentMessage, false
-	}
-
-	messages, err := ath.Db.GetConversationMessages(r.Context(), int32(conversationId))
-	if err != nil {
-		ath.internalError(w, r, fmt.Errorf("getting conversation messages %w", err))
-		return newAgentMessage, false
-	}
-
-	chatMessages := functools.Map(messages, func(m database.GetConversationMessagesRow) ChatMessage {
-		return ChatMessage{
-			MessageType: m.MessageType,
-			Content:     m.Content,
+	switch msgReq.MessageType {
+	case database.MessageTypeUser:
+		if strings.TrimSpace(msgReq.Content) == "" {
+			ath.badRequest(w, r, "message content cannot be empty")
+			return newMessage, false
 		}
-	})
-	agentMessageContent, err := agentDriver.Generate(r.Context(), agentConfig.Config.Bytes, chatMessages)
-	if err != nil {
-		ath.internalError(w, r, err)
-		return newAgentMessage, false
+		userMessage, err := ath.Db.PostMessageToConversation(r.Context(), database.PostMessageToConversationParams{
+			ConversationID: int32(conversationId),
+			Content:        msgReq.Content,
+			MessageType:    database.MessageTypeUser,
+			UserID:         sql.NullString{String: userProfile.UserId, Valid: true},
+		})
+
+		if err != nil {
+			ath.internalError(w, r, err)
+			return userMessage, false
+		}
+
+		return userMessage, true
+	case database.MessageTypeAgent:
+		agentConfig, err := ath.Db.GetAgentConfigFromConversationId(r.Context(), int32(conversationId))
+		if err != nil {
+			ath.internalError(w, r, fmt.Errorf("getting config %d %w", conversationId, err))
+			return newMessage, false
+		}
+
+		agentDriver, ok := ath.AgentClassDriverRegistry.GetFromId(agentConfig.AgentClassID)
+		if !ok {
+			ath.internalError(w, r, fmt.Errorf("getting agent driver %w", err))
+			return newMessage, false
+		}
+
+		messages, err := ath.Db.GetConversationMessages(r.Context(), int32(conversationId))
+		if err != nil {
+			ath.internalError(w, r, fmt.Errorf("getting conversation messages %w", err))
+			return newMessage, false
+		}
+
+		chatMessages := functools.Map(messages, func(m database.GetConversationMessagesRow) ChatMessage {
+			return ChatMessage{
+				MessageType: m.MessageType,
+				Content:     m.Content,
+			}
+		})
+		agentMessageContent, err := agentDriver.Generate(r.Context(), agentConfig.Config.Bytes, chatMessages)
+		if err != nil {
+			ath.internalError(w, r, err)
+			return newMessage, false
+		}
+
+		agentMessage, err := ath.Db.PostMessageToConversation(r.Context(), database.PostMessageToConversationParams{
+			ConversationID: int32(conversationId),
+			Content:        agentMessageContent,
+			MessageType:    database.MessageTypeAgent,
+			AgentID:        sql.NullInt32{Int32: agentConfig.AgentID, Valid: true},
+		})
+
+		if err != nil {
+			ath.internalError(w, r, err)
+			return agentMessage, false
+		}
+
+		return agentMessage, true
+	default:
+		ath.badRequest(w, r, "invalid message type")
+		return newMessage, false
 	}
 
-	agentMessage, err := ath.Db.PostMessageToConversation(r.Context(), database.PostMessageToConversationParams{
-		ConversationID: int32(conversationId),
-		Content:        agentMessageContent,
-		MessageType:    database.MessageTypeAgent,
-		AgentID:        sql.NullInt32{Int32: agentConfig.AgentID, Valid: true},
-	})
-
-	if err != nil {
-		ath.internalError(w, r, err)
-		return agentMessage, false
-	}
-
-	return agentMessage, true
 }
 
 func (ath *agentArenaHandler) authenticate(w http.ResponseWriter, r *http.Request) (UserProfile, bool) {
@@ -229,6 +266,10 @@ func (ath *agentArenaHandler) forbiddenError(w http.ResponseWriter, _ *http.Requ
 
 func (ath *agentArenaHandler) notFoundError(w http.ResponseWriter, _ *http.Request) {
 	http.Error(w, "Not Found", http.StatusNotFound)
+}
+
+func (ath *agentArenaHandler) badRequest(w http.ResponseWriter, _ *http.Request, msg string) {
+	http.Error(w, fmt.Sprintf("Bad Request: %s", msg), http.StatusBadRequest)
 }
 
 func (ath *agentArenaHandler) internalError(w http.ResponseWriter, _ *http.Request, err error) {
