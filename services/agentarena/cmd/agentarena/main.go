@@ -32,7 +32,9 @@ func main() {
 
 	agentClassDriverRegistry, err := agentregistry.New(ctx,
 		map[string]agentmux.AgentClassDriver{
-			"standard": &agentclass.StandardAgentDriver{},
+			"standard": &agentclass.OllamaAgentDriver{
+				Url: "http://localhost:11434",
+			},
 		},
 		db.GetAgentClassIdFromSlug)
 	if err != nil {

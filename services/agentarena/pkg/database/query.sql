@@ -54,6 +54,11 @@ from messages as m
 where m.conversation_id = $1
 order by m.sent_at asc, m.message_id asc;
 
+-- name: GetConversationMetadata :one
+select conversation_id, name, active_agent_id
+from conversations c
+where c.conversation_id = $1
+limit 1;
 
 -- name: PostMessageToConversation :one
 insert into messages (conversation_id, content, message_type, agent_id, user_id) values

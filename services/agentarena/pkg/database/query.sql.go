@@ -136,6 +136,26 @@ func (q *Queries) GetConversationMessages(ctx context.Context, conversationID in
 	return items, nil
 }
 
+const getConversationMetadata = `-- name: GetConversationMetadata :one
+select conversation_id, name, active_agent_id
+from conversations c
+where c.conversation_id = $1
+limit 1
+`
+
+type GetConversationMetadataRow struct {
+	ConversationID int32         `json:"conversationId"`
+	Name           string        `json:"name"`
+	ActiveAgentID  sql.NullInt32 `json:"activeAgentId"`
+}
+
+func (q *Queries) GetConversationMetadata(ctx context.Context, conversationID int32) (GetConversationMetadataRow, error) {
+	row := q.db.QueryRow(ctx, getConversationMetadata, conversationID)
+	var i GetConversationMetadataRow
+	err := row.Scan(&i.ConversationID, &i.Name, &i.ActiveAgentID)
+	return i, err
+}
+
 const getUserConversations = `-- name: GetUserConversations :many
 select c.conversation_id, c.name
 from conversations c

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Name}}</title>
+</head>
+<body>
+    <main>
+        <ol id="chatMessages">
+            {{range .Messages}}
+            <li><p>{{.Content}}</p></li>
+            {{end}}
+        </ol>
+
+        <form id="postMessage">
+            <textarea name="content" id="userMessage"></textarea>
+            <button type="submit">Send</button>
+        </form>
+    </main>
+
+    <script>
+        const messageList = document.querySelector("#chatMessages");
+        const postMessageForm = document.getElementById("postMessage");
+        document.addEventListener("submit", async e => {
+            e.preventDefault();
+            const formData = new FormData(postMessageForm);
+            const formObj = Object.fromEntries(formData.entries());
+            formObj.messageType = "user";
+            const jsonData = JSON.stringify(formObj);
+
+            const resp = await fetch("/api/conversations/{{.ConversationId}}/messages", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: jsonData,
+            });
+            
+            if (!resp.ok) {
+                console.error("failed to fetch data: ", resp.body);
+                return;
+            }
+
+            const newMessage = await resp.json();
+
+            const li = document.createElement("li");
+            const p = document.createElement("p");
+            p.innerText = newMessage.content;
+            li.appendChild(p);
+            messageList.appendChild(li);
+
+            {
+                const resp = await fetch("/api/conversations/{{.ConversationId}}/messages", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: '{"messageType": "agent"}',
+                });
+
+                if (!resp.ok) {
+                    console.error("failed to fetch data: ", resp.body);
+                    return;
+                }
+
+                const newMessage = await resp.json();
+
+                const li = document.createElement("li");
+                const p = document.createElement("p");
+                p.innerText = newMessage.content;
+                li.appendChild(p);
+                messageList.appendChild(li);
+            }
+            
+        })
+    </script>
+</body>
+</html>

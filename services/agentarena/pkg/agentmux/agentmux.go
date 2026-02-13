@@ -78,6 +78,7 @@ func NewAiTutorMux(config *AgentArenaConfig) http.Handler {
 	}
 
 	mux.HandleFunc("GET /conversations", buildRoute(nil, h.authenticate, nil, h.fetchConversations, renderTemplate[[]database.GetUserConversationsRow](templ, "conversations.html")))
+	mux.HandleFunc("GET /conversations/{conversationId}", buildRoute(h.setId("conversationId"), h.authenticate, h.authorizeStartedConversation, h.fetchConversation, renderTemplate[database.GetConversationRow](templ, "conversation.html")))
 
 	mux.HandleFunc("GET /api/agents/{agentId}", buildRoute(h.setId("agentId"), h.authenticate, h.authorizeManageAgent, h.fetchAgent, renderJson))
 	mux.HandleFunc("GET /api/me/conversations", buildRoute(nil, h.authenticate, nil, h.fetchConversations, renderJson))
@@ -119,6 +120,18 @@ func (ath *agentArenaHandler) fetchConversationMessages(w http.ResponseWriter, r
 	}
 
 	return messages, true
+}
+
+func (ath *agentArenaHandler) fetchConversation(w http.ResponseWriter, r *http.Request, _ UserProfile) (database.GetConversationRow, bool) {
+	conversationId := r.Context().Value(idKey).(idType)
+
+	conversation, err := ath.Db.GetConversation(r.Context(), int32(conversationId))
+	if err != nil {
+		ath.internalError(w, r, err)
+		return conversation, false
+	}
+
+	return conversation, true
 }
 
 type createMessageRequest struct {
