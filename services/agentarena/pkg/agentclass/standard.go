@@ -55,7 +55,9 @@ type ollamaResponse struct {
 
 func (oad *OllamaAgentDriver) Generate(ctx context.Context, config []byte, messages []agentmux.ChatMessage) (string, error) {
 	var ollamaConfig OllamaAgentConfig
-	json.NewDecoder(bytes.NewReader(config)).Decode(&ollamaConfig)
+	if err := json.Unmarshal(config, &ollamaConfig); err != nil {
+		return "", fmt.Errorf("failed to decode config: %w", err)
+	}
 
 	ollamaMessages := make([]ollamaMessage, len(messages)+1)
 
@@ -88,7 +90,13 @@ func (oad *OllamaAgentDriver) Generate(ctx context.Context, config []byte, messa
 		return "", err
 	}
 
-	res, err := http.Post(fmt.Sprintf("%s/api/chat", oad.Url), "application/json", &buf)
+	ollamaReq, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/api/chat", oad.Url), &buf)
+	if err != nil {
+		return "", err
+	}
+	ollamaReq.Header.Set("Content-Type", "application/json")
+
+	res, err := http.DefaultClient.Do(ollamaReq)
 	if err != nil {
 		return "", err
 	}
