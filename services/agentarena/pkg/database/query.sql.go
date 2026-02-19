@@ -12,6 +12,36 @@ import (
 	"github.com/jackc/pgtype"
 )
 
+const getAgent = `-- name: GetAgent :one
+select a.agent_id, a.name, a.agent_class_id, ac.config_schema::text as config_schema , a.config::text as config
+from agents a
+join agent_classes ac
+on a.agent_class_id = ac.agent_class_id
+where a.agent_id=$1
+limit 1
+`
+
+type GetAgentRow struct {
+	AgentID      int32  `json:"agentId"`
+	Name         string `json:"name"`
+	AgentClassID int32  `json:"agentClassId"`
+	ConfigSchema string `json:"configSchema"`
+	Config       string `json:"config"`
+}
+
+func (q *Queries) GetAgent(ctx context.Context, agentID int32) (GetAgentRow, error) {
+	row := q.db.QueryRow(ctx, getAgent, agentID)
+	var i GetAgentRow
+	err := row.Scan(
+		&i.AgentID,
+		&i.Name,
+		&i.AgentClassID,
+		&i.ConfigSchema,
+		&i.Config,
+	)
+	return i, err
+}
+
 const getAgentClassFromSlug = `-- name: GetAgentClassFromSlug :one
 select agent_class_id, name, config_schema
 from agent_classes
@@ -64,32 +94,6 @@ func (q *Queries) GetAgentConfigFromConversationId(ctx context.Context, conversa
 	row := q.db.QueryRow(ctx, getAgentConfigFromConversationId, conversationID)
 	var i GetAgentConfigFromConversationIdRow
 	err := row.Scan(&i.Config, &i.AgentID, &i.AgentClassID)
-	return i, err
-}
-
-const getAgentFull = `-- name: GetAgentFull :one
-select agents.agent_id, agents.name, agents.agent_class_id, agents.config
-from agents
-where agents.agent_id=$1
-limit 1
-`
-
-type GetAgentFullRow struct {
-	AgentID      int32        `json:"agentId"`
-	Name         string       `json:"name"`
-	AgentClassID int32        `json:"agentClassId"`
-	Config       pgtype.JSONB `json:"config"`
-}
-
-func (q *Queries) GetAgentFull(ctx context.Context, agentID int32) (GetAgentFullRow, error) {
-	row := q.db.QueryRow(ctx, getAgentFull, agentID)
-	var i GetAgentFullRow
-	err := row.Scan(
-		&i.AgentID,
-		&i.Name,
-		&i.AgentClassID,
-		&i.Config,
-	)
 	return i, err
 }
 

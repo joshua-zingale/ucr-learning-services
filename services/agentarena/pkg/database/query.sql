@@ -18,10 +18,12 @@ from agent_classes
 where slug = $1
 limit 1;
 
--- name: GetAgentFull :one
-select agents.agent_id, agents.name, agents.agent_class_id, agents.config
-from agents
-where agents.agent_id=$1
+-- name: GetAgent :one
+select a.agent_id, a.name, a.agent_class_id, ac.config_schema::text as config_schema , a.config::text as config
+from agents a
+join agent_classes ac
+on a.agent_class_id = ac.agent_class_id
+where a.agent_id=$1
 limit 1;
 
 -- name: HasAgentPermission :one

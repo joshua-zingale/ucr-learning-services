@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"text/template"
@@ -77,10 +78,15 @@ func NewAiTutorMux(config *AgentArenaConfig) http.Handler {
 		AgentArenaConfig: config,
 	}
 
+	fs := http.FileServer(http.Dir(filepath.Join("web", "static")))
+
+	mux.HandleFunc("GET /agents/{agentId}", buildRoute(h.setId("agentId"), h.authenticate, h.authorizeManageAgent, h.fetchAgent, renderTemplate[database.GetAgentRow](templ, "agent.html")))
 	mux.HandleFunc("GET /conversations", buildRoute(nil, h.authenticate, nil, h.fetchConversations, renderTemplate[[]database.GetUserConversationsRow](templ, "conversations.html")))
 	mux.HandleFunc("GET /conversations/{conversationId}", buildRoute(h.setId("conversationId"), h.authenticate, h.authorizeStartedConversation, h.fetchConversation, renderTemplate[database.GetConversationRow](templ, "conversation.html")))
+	mux.Handle("GET /static/", http.StripPrefix("/static", fs))
 
 	mux.HandleFunc("GET /api/agents/{agentId}", buildRoute(h.setId("agentId"), h.authenticate, h.authorizeManageAgent, h.fetchAgent, renderJson))
+	// mux.HandleFunc("PATCH /api/agents/{agentId}", buildRoute(h.setId("agentId"), h.authenticate, h.authorizeManageAgent, h.fetchAgent, renderJson))
 	mux.HandleFunc("GET /api/me/conversations", buildRoute(nil, h.authenticate, nil, h.fetchConversations, renderJson))
 	mux.HandleFunc("GET /api/conversations/{conversationId}/messages", buildRoute(h.setId("conversationId"), h.authenticate, h.authorizeStartedConversation, h.fetchConversationMessages, renderJson))
 	mux.HandleFunc("POST /api/conversations/{conversationId}/messages", buildRoute(h.setId("conversationId"), h.authenticate, h.authorizeStartedConversation, h.createMessage, renderJson))
@@ -97,11 +103,11 @@ func (ath *agentArenaHandler) fetchConversations(w http.ResponseWriter, r *http.
 	return conversations, true
 }
 
-func (ath *agentArenaHandler) fetchAgent(w http.ResponseWriter, r *http.Request, profile UserProfile) (database.GetAgentFullRow, bool) {
+func (ath *agentArenaHandler) fetchAgent(w http.ResponseWriter, r *http.Request, profile UserProfile) (database.GetAgentRow, bool) {
 
 	agentId := r.Context().Value(idKey).(idType)
 
-	agent, err := ath.Db.GetAgentFull(r.Context(), int32(agentId))
+	agent, err := ath.Db.GetAgent(r.Context(), int32(agentId))
 	if err != nil {
 		ath.notFoundError(w, r)
 		return agent, false
@@ -109,6 +115,19 @@ func (ath *agentArenaHandler) fetchAgent(w http.ResponseWriter, r *http.Request,
 
 	return agent, true
 }
+
+// func (ath *agentArenaHandler) editAgent(w http.ResponseWriter, r *http.Request, _ UserProfile) (database.GetAgentRow, bool) {
+
+// 	agentId := r.Context().Value(idKey).(idType)
+
+// 	agent, err := ath.Db.GetAgent(r.Context(), int32(agentId))
+// 	if err != nil {
+// 		ath.notFoundError(w, r)
+// 		return agent, false
+// 	}
+
+// 	return agent, true
+// }
 
 func (ath *agentArenaHandler) fetchConversationMessages(w http.ResponseWriter, r *http.Request, _ UserProfile) ([]database.GetConversationMessagesRow, bool) {
 	conversationId := r.Context().Value(idKey).(idType)
