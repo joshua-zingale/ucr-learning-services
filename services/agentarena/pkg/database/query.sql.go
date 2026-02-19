@@ -280,3 +280,19 @@ func (q *Queries) StartedConversation(ctx context.Context, arg StartedConversati
 	err := row.Scan(&exists)
 	return exists, err
 }
+
+const setAgentConfigUnchecked = `-- name: setAgentConfigUnchecked :exec
+update agents
+set config = $2
+where agent_id = $1
+`
+
+type setAgentConfigUncheckedParams struct {
+	AgentID int32        `json:"agentId"`
+	Config  pgtype.JSONB `json:"config"`
+}
+
+func (q *Queries) setAgentConfigUnchecked(ctx context.Context, arg setAgentConfigUncheckedParams) error {
+	_, err := q.db.Exec(ctx, setAgentConfigUnchecked, arg.AgentID, arg.Config)
+	return err
+}

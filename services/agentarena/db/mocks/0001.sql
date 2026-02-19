@@ -1,5 +1,5 @@
 insert into agent_classes(agent_class_id, slug, name, config_schema) values
-(1, 'standard', 'Standard Agent', '{"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "properties": {"systemPrompt": {"type": "string"}}}');
+(1, 'standard', 'Standard Agent', '{"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object", "properties": {"systemPrompt": {"type": "string"}}, "additionalProperties": false}');
 
 insert into agents (agent_id, name, agent_class_id, config) values
 (1, 'tombot', 1, '{"systemPrompt": "You are Tom. Speak with the user like you are an old uncle."}'),

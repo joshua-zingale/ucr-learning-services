@@ -26,6 +26,13 @@ on a.agent_class_id = ac.agent_class_id
 where a.agent_id=$1
 limit 1;
 
+
+-- name: setAgentConfigUnchecked :exec
+update agents
+set config = $2
+where agent_id = $1;
+
+
 -- name: HasAgentPermission :one
 SELECT EXISTS (
     SELECT 1 FROM user_agent_permissions uap

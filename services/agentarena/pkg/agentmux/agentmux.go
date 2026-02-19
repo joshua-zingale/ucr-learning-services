@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"path/filepath"
@@ -86,7 +87,7 @@ func NewAiTutorMux(config *AgentArenaConfig) http.Handler {
 	mux.Handle("GET /static/", http.StripPrefix("/static", fs))
 
 	mux.HandleFunc("GET /api/agents/{agentId}", buildRoute(h.setId("agentId"), h.authenticate, h.authorizeManageAgent, h.fetchAgent, renderJson))
-	// mux.HandleFunc("PATCH /api/agents/{agentId}", buildRoute(h.setId("agentId"), h.authenticate, h.authorizeManageAgent, h.fetchAgent, renderJson))
+	mux.HandleFunc("PATCH /api/agents/{agentId}", buildRoute(h.setId("agentId"), h.authenticate, h.authorizeManageAgent, h.editAgent, respondWithCode[struct{}](http.StatusNoContent)))
 	mux.HandleFunc("GET /api/me/conversations", buildRoute(nil, h.authenticate, nil, h.fetchConversations, renderJson))
 	mux.HandleFunc("GET /api/conversations/{conversationId}/messages", buildRoute(h.setId("conversationId"), h.authenticate, h.authorizeStartedConversation, h.fetchConversationMessages, renderJson))
 	mux.HandleFunc("POST /api/conversations/{conversationId}/messages", buildRoute(h.setId("conversationId"), h.authenticate, h.authorizeStartedConversation, h.createMessage, renderJson))
@@ -116,18 +117,22 @@ func (ath *agentArenaHandler) fetchAgent(w http.ResponseWriter, r *http.Request,
 	return agent, true
 }
 
-// func (ath *agentArenaHandler) editAgent(w http.ResponseWriter, r *http.Request, _ UserProfile) (database.GetAgentRow, bool) {
+func (ath *agentArenaHandler) editAgent(w http.ResponseWriter, r *http.Request, _ UserProfile) (struct{}, bool) {
 
-// 	agentId := r.Context().Value(idKey).(idType)
+	agentId := r.Context().Value(idKey).(idType)
 
-// 	agent, err := ath.Db.GetAgent(r.Context(), int32(agentId))
-// 	if err != nil {
-// 		ath.notFoundError(w, r)
-// 		return agent, false
-// 	}
+	requestBody, err := io.ReadAll(r.Body)
+	if err != nil {
+		return struct{}{}, false
+	}
 
-// 	return agent, true
-// }
+	if err = ath.Db.SetAgentConfig(r.Context(), int32(agentId), requestBody); err != nil {
+		ath.badRequest(w, r, err.Error())
+		return struct{}{}, false
+	}
+
+	return struct{}{}, true
+}
 
 func (ath *agentArenaHandler) fetchConversationMessages(w http.ResponseWriter, r *http.Request, _ UserProfile) ([]database.GetConversationMessagesRow, bool) {
 	conversationId := r.Context().Value(idKey).(idType)
@@ -313,6 +318,12 @@ func (ath *agentArenaHandler) badRequest(w http.ResponseWriter, _ *http.Request,
 func (ath *agentArenaHandler) internalError(w http.ResponseWriter, _ *http.Request, err error) {
 	log.Printf("Internal Server Error: %s", err.Error())
 	http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+}
+
+func respondWithCode[D any](code int) renderFunction[D] {
+	return func(w http.ResponseWriter, r *http.Request, data D) {
+		w.WriteHeader(code)
+	}
 }
 
 func renderJson[T any](w http.ResponseWriter, r *http.Request, data T) {
