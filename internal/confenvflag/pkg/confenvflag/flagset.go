@@ -1,3 +1,7 @@
+// Enhances the standard library's 'flag' by allowing
+// environment variables or a config file to set arguments.
+//
+// See the documentation for Parse() for usage.
 package confenvflag
 
 import (
@@ -8,14 +12,26 @@ import (
 	"strings"
 )
 
-// Parses arguments, in order, from arguments, environment variables, then a config file.
-// Thus arguments overwrite environment variables, which overwrite the config file.
+// Parse populates the provided flagSet by looking up values in three locations,
+// strictly in this order of precedence:
+//  1. Command line arguments (already defined in flagSet)
+//  2. Environment variables
+//  3. A configuration file
+//
+// If a flag is set via command line, environment variables and config files are ignored.
+// If not set via command line, it looks for an environment variable. If that is missing,
+// it checks the config file. If all are missing, the flag retains its default value.
+//
+// Mapping Rules:
+// For a flag named "pg-username" with prefix "WEB_":
+//   - Env Var: WEB_PG_USERNAME (Prefix + Uppercase + Dashes->Underscores)
+//   - Config:  pg_username = value (Dashes->Underscores)
+//
+// Note: This function automatically adds a "config" string flag to the flagSet
+// to locate the configuration file.
 func Parse(flagSet *flag.FlagSet, environmentVariablePrefix string, args []string) error {
-	if flagSet.ErrorHandling() != flag.ExitOnError {
-		panic("The input flagset must be set to ExitOnError because the other modes are not implemented!")
-	}
 
-	flagSet.String("config", "", "the path to a configuration file. The config format is line-separated names, followed by an equals sign, then the value; each name in the config file is the parameter name with dashes (-) replaced with underscores (_)")
+	flagSet.String("config", "", "the path to a configuration file. The config format is line-separated names, followed by an equals sign, then the value; each name in the config file is the parameter name with dashes (-) replaced with underscores (_).")
 
 	if err := flagSet.Parse(args); err != nil {
 		return err
@@ -54,7 +70,7 @@ func Parse(flagSet *flag.FlagSet, environmentVariablePrefix string, args []strin
 		configName := paramNameToConfigName(flg.Name)
 		if value, ok := config[configName]; ok {
 			if err := flg.Value.Set(value); err != nil {
-				return fmt.Errorf("setting value from config name '%e': %w", configName, err)
+				return fmt.Errorf("setting value from config name '%s': %w", configName, err)
 			}
 		}
 
