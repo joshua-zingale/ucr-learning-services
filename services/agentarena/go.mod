@@ -4,6 +4,8 @@ go 1.25.0
 
 require github.com/jackc/pgx/v4 v4.18.3
 
+require github.com/joshua-zingale/ucr-learning-services/internal/confenvflag v0.0.0-20260219025503-4f7805594e7b // indirect
+
 require (
 	github.com/evanphx/json-patch/v5 v5.9.11
 	github.com/jackc/chunkreader/v2 v2.0.1 // indirect
