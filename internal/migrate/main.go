@@ -34,15 +34,6 @@ func main() {
 	flag.Parse(os.Args[1:])
 	args := flag.Args()
 
-	if *to == "" {
-		fmt.Fprintln(os.Stderr, "must specify -to")
-		os.Exit(1)
-	}
-	if *migrateCommand == "" {
-		fmt.Fprintln(os.Stderr, "must specify -command")
-		os.Exit(1)
-	}
-
 	if len(args) != 1 {
 		fmt.Fprintf(os.Stderr, "Usage: %s [-[-]flag [value]...] PATH_TO_MIGRATIONS\n", _EXECUTABLE_NAME)
 		os.Exit(1)
@@ -66,6 +57,15 @@ func main() {
 	if *printState {
 		fmt.Println(currentState)
 		os.Exit(0)
+	}
+
+	if *to == "" {
+		fmt.Fprintln(os.Stderr, "must specify -to")
+		os.Exit(1)
+	}
+	if *migrateCommand == "" {
+		fmt.Fprintln(os.Stderr, "must specify -command")
+		os.Exit(1)
 	}
 
 	upMigrationIds := setFromList(map_(
