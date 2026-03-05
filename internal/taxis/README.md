@@ -1,33 +1,42 @@
-Taxis (Greek τάξις) group management web server that is intended to serve as middleware.
+Taxis (Greek τάξις) is a light-weight reverse proxy for an authentication endpoint that augments the response with any groups to which the request's user belongs.
 
-# Plan
+Taxis is not designed to be infinitely scalable, but to permit easy modification of group assignments via the editing of a single YAML-like file.
 
-## Behavior
+Taxis is **not** responsible for *authentication*, but for *authorization*.
+Therefore, Taxis makes a request to an external authentication server (such as [OAuth2 Proxy](https://github.com/oauth2-proxy/oauth2-proxy)) and augments its response with group information.
 
-Taxis should receive a web request with an X-Email header containing a unique email for the user.
-The manager will then determine to which groups the email belongs,
-responding with a copy of the request,
-only with an X-Groups header added that contains a comma separated list of permissions like
+# Functionality
+
+After receiving a web request, Taxis will route the request first to an authentication server.
+If the authentication server responds with a 202 code and a header containing a user's ID,
+Taxis will respond with the initial request both with the user's ID and any groups to which the user belongs.
+Otherwise, in the event that the authentication server either responds with a status code that is not 202 or fails to include the user's ID in the header, Taxis responds with an error status.
+
+## Running the Server
+
+Use `taxis serve -h` to learn how to configure & run Taxis.
+
+## Request Format
+
+The format for a valid request to Taxis is determined by the authentication server that is used
+because Taxis functions as a reverse proxy for the authentication server.
+
+## Response Format
+
+If a request is authenticated by the authentication server,
+Taxis will respond with two headers populated, one which contains the user's ID and one that contains his groups.
+Assuming a default configuration of Taxis, these headers may look like
 
 ```
+X-Email: tom@univ.edu
 X-Groups: cs100.instructor,cs287.student
 ```
 
-To minimize the size of the header, a subset of all roles can be obtained.
-If the root URL is `http://127.0.0.1:6400/`, then proxying `http://127.0.0.1:6400/cs100`
-would add to the headers, for the same hypothetical user as above,
+## Assigning Groups
 
-```
-X-Groups: instructor
-```
+Taxis relies on a very limited subset of YAML as a file to assign groups to users.
 
-
-## Configuration
-
-
-### Initialization 
-
-The policy manager web server should support initialization via a YAML file like
+For example,
 
 ```
 cs100:
@@ -42,29 +51,7 @@ cs9B: ...
 
 This will assign bob@ucr.edu, for example, the group cs100.instructor
 
+### YAML-like Format
 
-### Updates
-
-All methods for updating the group assignments must function while keeping the group manager functional.
-
-
-#### Command Line Interface
-
-Taxis should have a terminal interface that supports
-
-```bash
-taxis create -p cs100.instructor # create the parent groups
-taxis create cs100.students # fail if the parent(s) are not already created
-taxis destroy cs100.students # delete the students group in cs100 if it is empty
-taxis destroy -r cs100 # require -r for recursive deletes
-taxis assign cs100.instructor bob@ucr.edu rob@ucr.edu # Add one or more emails to a group
-taxis unassign cs100.instructor bob@ucr.edu rob@ucr.edu # remove one or more emails from a group
-taxis get-groups bob@ucr.edu rob@ucr.edu # get the intersection of the goups held by all specified emails
-taxis list cs100 # get all subgroups, e.g. "instructor, TA, student"
-```
-
-#### YAML File
-
-The system should be settable to track a YAML file, causing the group assignments to reload whenever the tracked YAML file has been updated.
-
-
+The file must have map as the root element. Then, each value can either be a map or a list of strings.
+Maps and lists of strings may only be specified using the multi-line syntax as in the example.
