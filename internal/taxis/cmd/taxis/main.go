@@ -83,11 +83,6 @@ func serve(execution executionContext) {
 		log.Fatal(err.Error())
 	}
 
-	log.Printf("URL received %s: ...", *authProxyUrlSting)
-	log.Printf("Groups header name %s: ...", *groupsHeaderName)
-	log.Printf("Groups host  %s: ...", *host)
-	log.Printf("rootPath host  %s: ...", *rootPath)
-
 	positionalArgs := flag.Args()
 	if len(positionalArgs) != 1 {
 		fmt.Fprintf(os.Stderr, "Invalid usage: must be\n    %s [-flag [value]...] GROUPS_FILE.yml\n", execution.CommandName())
