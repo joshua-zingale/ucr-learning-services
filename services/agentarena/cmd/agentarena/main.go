@@ -24,7 +24,7 @@ func main() {
 	flag := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	var (
 		host = flag.String("host", "127.0.0.1", "the host at which the web server is broadcast.")
-		port = flag.String("port", "14812", "the port on which the web server is broadcast.")
+		port = flag.String("port", "46307", "the port on which the web server is broadcast.")
 
 		pg_username = flag.String("pg-username", "", "the username of postgres user")
 		pg_password = flag.String("pg-password", "", "the password for postgres user")
