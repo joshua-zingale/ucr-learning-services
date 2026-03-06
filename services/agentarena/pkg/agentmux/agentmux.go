@@ -35,11 +35,11 @@ type ChatMessage struct {
 // Defines functionality for an AgentClass
 type AgentClassDriver interface {
 	Generate(ctx context.Context, config []byte, messages []ChatMessage) (string, error)
+	GetJsonSchemaRaw(ctx context.Context) ([]byte, error)
 }
 
 type AgentClassDriverRegistry interface {
-	GetFromId(id int32) (AgentClassDriver, bool)
-	GetFromSlug(slug string) (AgentClassDriver, bool)
+	GetFromId(id string) (AgentClassDriver, bool)
 }
 
 type AgentArenaConfig struct {
@@ -81,7 +81,7 @@ func NewAiTutorMux(config *AgentArenaConfig) http.Handler {
 
 	fs := http.FileServer(http.Dir(filepath.Join("web", "static")))
 
-	mux.HandleFunc("GET /agents/{agentId}", buildRoute(h.setId("agentId"), h.authenticate, h.authorizeManageAgent, h.fetchAgent, renderTemplate[database.GetAgentRow](templ, "agent.html")))
+	mux.HandleFunc("GET /agents/{agentId}", buildRoute(h.setId("agentId"), h.authenticate, h.authorizeManageAgent, h.fetchAgentWithConfigAndSchema, renderTemplate[agentWithConfigAndSchema](templ, "agent.html")))
 	mux.HandleFunc("GET /conversations", buildRoute(nil, h.authenticate, nil, h.fetchConversations, renderTemplate[[]database.GetUserConversationsRow](templ, "conversations.html")))
 	mux.HandleFunc("GET /conversations/{conversationId}", buildRoute(h.setId("conversationId"), h.authenticate, h.authorizeStartedConversation, h.fetchConversation, renderTemplate[database.GetConversationRow](templ, "conversation.html")))
 	mux.Handle("GET /static/", http.StripPrefix("/static", fs))
@@ -104,7 +104,7 @@ func (ath *agentArenaHandler) fetchConversations(w http.ResponseWriter, r *http.
 	return conversations, true
 }
 
-func (ath *agentArenaHandler) fetchAgent(w http.ResponseWriter, r *http.Request, profile UserProfile) (database.GetAgentRow, bool) {
+func (ath *agentArenaHandler) fetchAgent(w http.ResponseWriter, r *http.Request, _ UserProfile) (database.GetAgentRow, bool) {
 
 	agentId := r.Context().Value(idKey).(idType)
 
@@ -117,6 +117,41 @@ func (ath *agentArenaHandler) fetchAgent(w http.ResponseWriter, r *http.Request,
 	return agent, true
 }
 
+type agentWithConfigAndSchema struct {
+	AgentID      int32
+	Name         string
+	Config       string
+	ConfigSchema string
+}
+
+func (ath *agentArenaHandler) fetchAgentWithConfigAndSchema(w http.ResponseWriter, r *http.Request, userProfile UserProfile) (agentWithConfigAndSchema, bool) {
+	var awcas agentWithConfigAndSchema
+
+	agent, ok := ath.fetchAgent(w, r, userProfile)
+	if !ok {
+		return awcas, false
+	}
+
+	driver, ok := ath.AgentClassDriverRegistry.GetFromId(agent.AgentClassID)
+	if !ok {
+		ath.internalError(w, r, fmt.Errorf("missing config schema for agent class %s", agent.AgentClassID))
+		return awcas, false
+	}
+
+	configSchema, err := driver.GetJsonSchemaRaw(r.Context())
+	if err != nil {
+		ath.internalError(w, r, err)
+		return awcas, false
+	}
+
+	awcas.AgentID = agent.AgentID
+	awcas.Name = agent.Name
+	awcas.Config = string(agent.Config.Bytes)
+	awcas.ConfigSchema = string(configSchema)
+
+	return awcas, true
+}
+
 func (ath *agentArenaHandler) editAgent(w http.ResponseWriter, r *http.Request, _ UserProfile) (struct{}, bool) {
 
 	agentId := r.Context().Value(idKey).(idType)
@@ -126,7 +161,25 @@ func (ath *agentArenaHandler) editAgent(w http.ResponseWriter, r *http.Request, 
 		return struct{}{}, false
 	}
 
-	if err = ath.Db.SetAgentConfig(r.Context(), int32(agentId), requestBody); err != nil {
+	agent, err := ath.Db.GetAgent(r.Context(), int32(agentId))
+	if err != nil {
+		ath.badRequest(w, r, fmt.Sprintf("Invalid agent_id: %d", agentId))
+		return struct{}{}, false
+	}
+
+	driver, ok := ath.AgentClassDriverRegistry.GetFromId(agent.AgentClassID)
+	if !ok {
+		ath.internalError(w, r, fmt.Errorf("missing driver for agent class with id %s", agent.AgentClassID))
+		return struct{}{}, false
+	}
+
+	schema, err := driver.GetJsonSchemaRaw(r.Context())
+	if err != nil {
+		ath.internalError(w, r, err)
+		return struct{}{}, false
+	}
+
+	if err = ath.Db.UpdateAgentConfig(r.Context(), agent, requestBody, schema); err != nil {
 		ath.badRequest(w, r, err.Error())
 		return struct{}{}, false
 	}

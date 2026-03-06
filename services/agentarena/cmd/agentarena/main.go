@@ -57,8 +57,7 @@ func main() {
 			"ollama": &agentclass.OllamaAgentDriver{
 				Url: "http://localhost:11434",
 			},
-		},
-		db.GetAgentClassIdFromSlug)
+		})
 	if err != nil {
 		log.Fatalf("Failed to initialize agent class drivers: %s", err.Error())
 	}

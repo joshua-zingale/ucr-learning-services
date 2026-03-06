@@ -99,16 +99,14 @@ func (ns NullMessageType) Value() (driver.Value, error) {
 type Agent struct {
 	AgentID      int32        `json:"agentId"`
 	Name         string       `json:"name"`
-	AgentClassID int32        `json:"agentClassId"`
+	AgentClassID string       `json:"agentClassId"`
 	Config       pgtype.JSONB `json:"config"`
 	CreatedAt    sql.NullTime `json:"createdAt"`
 }
 
 type AgentClass struct {
-	AgentClassID int32        `json:"agentClassId"`
-	Slug         string       `json:"slug"`
-	Name         string       `json:"name"`
-	ConfigSchema pgtype.JSONB `json:"configSchema"`
+	AgentClassID string `json:"agentClassId"`
+	Name         string `json:"name"`
 }
 
 type Conversation struct {

@@ -13,53 +13,33 @@ type integer interface {
 	comparable
 }
 
-type AgentClassDriverRegistry[T integer] struct {
-	drivers  map[T]agentmux.AgentClassDriver
-	slugToId map[string]T
+type AgentClassDriverRegistry struct {
+	drivers map[string]agentmux.AgentClassDriver
 }
 
-func (acdr *AgentClassDriverRegistry[T]) GetFromId(id T) (agentmux.AgentClassDriver, bool) {
+func (acdr *AgentClassDriverRegistry) GetFromId(id string) (agentmux.AgentClassDriver, bool) {
 	driver, ok := acdr.drivers[id]
 	return driver, ok
 }
 
-func (acdr *AgentClassDriverRegistry[T]) GetFromSlug(slug string) (agentmux.AgentClassDriver, bool) {
-	id, ok := acdr.slugToId[slug]
-	if !ok {
-		return nil, false
-	}
-	return acdr.GetFromId(id)
-}
-
-func (acdr *AgentClassDriverRegistry[T]) Register(id T, slug string, agentClass agentmux.AgentClassDriver) error {
+func (acdr *AgentClassDriverRegistry) Register(id string, agentClass agentmux.AgentClassDriver) error {
 	if _, ok := acdr.drivers[id]; ok {
-		return fmt.Errorf("duplicate agent class id, '%d'", id)
-	}
-	if _, ok := acdr.slugToId[slug]; ok {
-		return fmt.Errorf("duplicate agent class slug, '%s'", slug)
+		return fmt.Errorf("duplicate agent class id, '%s'", id)
 	}
 
-	acdr.slugToId[slug] = id
 	acdr.drivers[id] = agentClass
 
 	return nil
 }
 
-func New[T integer](ctx context.Context, slugToDriver map[string]agentmux.AgentClassDriver, getIdFromSlug func(context.Context, string) (T, error)) (*AgentClassDriverRegistry[T], error) {
-	acdr := AgentClassDriverRegistry[T]{
-		drivers:  map[T]agentmux.AgentClassDriver{},
-		slugToId: map[string]T{},
+func New(ctx context.Context, idToDriver map[string]agentmux.AgentClassDriver) (*AgentClassDriverRegistry, error) {
+	acdr := AgentClassDriverRegistry{
+		drivers: map[string]agentmux.AgentClassDriver{},
 	}
-
-	for slug, driver := range slugToDriver {
-		id, err := getIdFromSlug(ctx, slug)
-		if err != nil {
-			return nil, fmt.Errorf("failed to locate agent class's ID: %w", err)
-		}
-		if err := acdr.Register(id, slug, driver); err != nil {
+	for id, driver := range idToDriver {
+		if err := acdr.Register(id, driver); err != nil {
 			return nil, err
 		}
-
 	}
 	return &acdr, nil
 }

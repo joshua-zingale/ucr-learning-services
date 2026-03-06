@@ -3,17 +3,15 @@ CREATE TYPE message_type AS ENUM ('user', 'agent');
 
 
 create table agent_classes(
-    agent_class_id serial primary key,
-    slug varchar(32) unique not null,
-    name varchar(32) not null,
-    config_schema jsonb not null
+    agent_class_id varchar(32) primary key,
+    name varchar(32) not null
 );
 
 create table agents (
     agent_id serial primary key,
     name varchar(32) not null,
 
-    agent_class_id int references agent_classes(agent_class_id) not null,
+    agent_class_id varchar(32) references agent_classes(agent_class_id) not null,
     config jsonb not null,
 
     created_at timestamptz default now()

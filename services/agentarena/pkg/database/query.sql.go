@@ -13,20 +13,17 @@ import (
 )
 
 const getAgent = `-- name: GetAgent :one
-select a.agent_id, a.name, a.agent_class_id, ac.config_schema::text as config_schema , a.config::text as config
+select a.agent_id, a.name, a.agent_class_id, a.config
 from agents a
-join agent_classes ac
-on a.agent_class_id = ac.agent_class_id
 where a.agent_id=$1
 limit 1
 `
 
 type GetAgentRow struct {
-	AgentID      int32  `json:"agentId"`
-	Name         string `json:"name"`
-	AgentClassID int32  `json:"agentClassId"`
-	ConfigSchema string `json:"configSchema"`
-	Config       string `json:"config"`
+	AgentID      int32        `json:"agentId"`
+	Name         string       `json:"name"`
+	AgentClassID string       `json:"agentClassId"`
+	Config       pgtype.JSONB `json:"config"`
 }
 
 func (q *Queries) GetAgent(ctx context.Context, agentID int32) (GetAgentRow, error) {
@@ -36,44 +33,9 @@ func (q *Queries) GetAgent(ctx context.Context, agentID int32) (GetAgentRow, err
 		&i.AgentID,
 		&i.Name,
 		&i.AgentClassID,
-		&i.ConfigSchema,
 		&i.Config,
 	)
 	return i, err
-}
-
-const getAgentClassFromSlug = `-- name: GetAgentClassFromSlug :one
-select agent_class_id, name, config_schema
-from agent_classes
-where slug = $1
-limit 1
-`
-
-type GetAgentClassFromSlugRow struct {
-	AgentClassID int32        `json:"agentClassId"`
-	Name         string       `json:"name"`
-	ConfigSchema pgtype.JSONB `json:"configSchema"`
-}
-
-func (q *Queries) GetAgentClassFromSlug(ctx context.Context, slug string) (GetAgentClassFromSlugRow, error) {
-	row := q.db.QueryRow(ctx, getAgentClassFromSlug, slug)
-	var i GetAgentClassFromSlugRow
-	err := row.Scan(&i.AgentClassID, &i.Name, &i.ConfigSchema)
-	return i, err
-}
-
-const getAgentClassIdFromSlug = `-- name: GetAgentClassIdFromSlug :one
-select agent_class_id
-from agent_classes
-where slug = $1
-limit 1
-`
-
-func (q *Queries) GetAgentClassIdFromSlug(ctx context.Context, slug string) (int32, error) {
-	row := q.db.QueryRow(ctx, getAgentClassIdFromSlug, slug)
-	var agent_class_id int32
-	err := row.Scan(&agent_class_id)
-	return agent_class_id, err
 }
 
 const getAgentConfigFromConversationId = `-- name: GetAgentConfigFromConversationId :one
@@ -87,7 +49,7 @@ limit 1
 type GetAgentConfigFromConversationIdRow struct {
 	Config       pgtype.JSONB `json:"config"`
 	AgentID      int32        `json:"agentId"`
-	AgentClassID int32        `json:"agentClassId"`
+	AgentClassID string       `json:"agentClassId"`
 }
 
 func (q *Queries) GetAgentConfigFromConversationId(ctx context.Context, conversationID int32) (GetAgentConfigFromConversationIdRow, error) {

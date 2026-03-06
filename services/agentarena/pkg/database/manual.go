@@ -1,11 +1,11 @@
 package database
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	"github.com/jackc/pgtype"
@@ -36,19 +36,14 @@ func (q *Queries) GetConversation(ctx context.Context, conversationID int32) (Ge
 	return row, nil
 }
 
-// Validates that config matches the json schema of agent's class,
-// returning an error if not.
-func (q *Queries) SetAgentConfig(ctx context.Context, agentID int32, config []byte) error {
+// Validates that config matches the json schema of agent's class before updating,
+// returning an error if validation fails.
+func (q *Queries) UpdateAgentConfig(ctx context.Context, agent GetAgentRow, config []byte, configSchema []byte) error {
 
-	agent, err := q.GetAgent(ctx, agentID)
-	if err != nil {
-		return err
-	}
-
-	currentConfig := []byte(agent.Config)
+	currentConfig := agent.Config.Bytes
 
 	compiler := jsonschema.NewCompiler()
-	compiler.AddResource("config.json", strings.NewReader(agent.ConfigSchema))
+	compiler.AddResource("config.json", bytes.NewReader(configSchema))
 
 	schema, err := compiler.Compile("config.json")
 	if err != nil {
@@ -70,7 +65,7 @@ func (q *Queries) SetAgentConfig(ctx context.Context, agentID int32, config []by
 	}
 
 	return q.setAgentConfigUnchecked(ctx, setAgentConfigUncheckedParams{
-		AgentID: agentID,
+		AgentID: agent.AgentID,
 		Config: pgtype.JSONB{
 			Bytes:  patchedConfig,
 			Status: pgtype.Present,

@@ -103,3 +103,11 @@ func (oad *OllamaAgentDriver) Generate(ctx context.Context, config []byte, messa
 
 	return resData.Message.Content, nil
 }
+
+func (oad *OllamaAgentDriver) GetJsonSchemaRaw(ctx context.Context) ([]byte, error) {
+	return []byte(`{
+		"$schema": "https://json-schema.org/draft/2020-12/schema",
+		"type": "object",
+		"properties": {"systemPrompt": {"type": "string"}},
+		"additionalProperties": false}`), nil
+}

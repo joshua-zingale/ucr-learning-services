@@ -1,9 +1,3 @@
--- name: GetAgentClassFromSlug :one
-select agent_class_id, name, config_schema
-from agent_classes
-where slug = $1
-limit 1;
-
 -- name: GetAgentConfigFromConversationId :one
 select a.config, a.agent_id, a.agent_class_id
 from agents as a join conversations as c
@@ -12,17 +6,9 @@ where c.conversation_id = $1
 limit 1;
 
 
--- name: GetAgentClassIdFromSlug :one
-select agent_class_id
-from agent_classes
-where slug = $1
-limit 1;
-
 -- name: GetAgent :one
-select a.agent_id, a.name, a.agent_class_id, ac.config_schema::text as config_schema , a.config::text as config
+select a.agent_id, a.name, a.agent_class_id, a.config
 from agents a
-join agent_classes ac
-on a.agent_class_id = ac.agent_class_id
 where a.agent_id=$1
 limit 1;
 
