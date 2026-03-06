@@ -31,6 +31,13 @@ func main() {
 		pg_host     = flag.String("pg-host", "127.0.0.1", "the host at which postgres in broadcast.")
 		pg_port     = flag.String("pg-port", "5432", "the port on which postgres in broadcast.")
 		pg_database = flag.String("pg-database", "", "the name of the postgres databse.")
+
+		// To avoid having to add command line arguments for every possible language model type,
+		// there should be one parameter called "agent-config" that takes a path to a config
+		// file where the configurations for ollama, Gemini, OpenAI etc can be specified.
+		// This parameter is here only to facilitate quick testing of the system until such
+		// a config is supported.
+		ollama_url = flag.String("ollama-url", "http://localhost:11434", "the url of ollama")
 	)
 
 	if err := confenvflag.Parse(flag, _ENV_VAR_PREFIX, os.Args[1:]); err != nil {
@@ -55,7 +62,7 @@ func main() {
 	agentClassDriverRegistry, err := agentregistry.New(ctx,
 		map[string]agentmux.AgentClassDriver{
 			"ollama": &agentclass.OllamaAgentDriver{
-				Url: "http://localhost:11434",
+				Url: *ollama_url,
 			},
 		})
 	if err != nil {
