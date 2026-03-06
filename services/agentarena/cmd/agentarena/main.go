@@ -26,11 +26,11 @@ func main() {
 		host = flag.String("host", "127.0.0.1", "the host at which the web server is broadcast.")
 		port = flag.String("port", "46307", "the port on which the web server is broadcast.")
 
-		pg_username = flag.String("pg-username", "", "the username of postgres user")
-		pg_password = flag.String("pg-password", "", "the password for postgres user")
+		pg_username = flag.String("pg-username", "", "the username of postgres user.")
+		pg_password = flag.String("pg-password", "", "the password for postgres user.")
 		pg_host     = flag.String("pg-host", "127.0.0.1", "the host at which postgres in broadcast.")
 		pg_port     = flag.String("pg-port", "5432", "the port on which postgres in broadcast.")
-		pg_database = flag.String("pg-database", "", "the name of the postgres databse")
+		pg_database = flag.String("pg-database", "", "the name of the postgres databse.")
 	)
 
 	if err := confenvflag.Parse(flag, _ENV_VAR_PREFIX, os.Args[1:]); err != nil {
@@ -54,7 +54,7 @@ func main() {
 
 	agentClassDriverRegistry, err := agentregistry.New(ctx,
 		map[string]agentmux.AgentClassDriver{
-			"standard": &agentclass.OllamaAgentDriver{
+			"ollama": &agentclass.OllamaAgentDriver{
 				Url: "http://localhost:11434",
 			},
 		},
