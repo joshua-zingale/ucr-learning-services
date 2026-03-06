@@ -1,11 +1,11 @@
 package templates
 
 import (
-	"path/filepath"
-	"text/template"
+	"html/template"
+
+	"github.com/joshua-zingale/ucr-learning-services/services/agentarena"
 )
 
 func LoadTemplates() *template.Template {
-	pattern := filepath.Join("web", "templates", "*.html")
-	return template.Must(template.ParseGlob(pattern))
+	return template.Must(template.New("").ParseFS(agentarena.TemplateFS, "web/templates/*.html"))
 }
