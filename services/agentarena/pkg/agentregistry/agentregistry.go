@@ -5,13 +5,7 @@ import (
 	"fmt"
 
 	"github.com/joshua-zingale/ucr-learning-services/services/agentarena/pkg/agentmux"
-	"golang.org/x/exp/constraints"
 )
-
-type integer interface {
-	constraints.Integer
-	comparable
-}
 
 type AgentClassDriverRegistry struct {
 	drivers map[string]agentmux.AgentClassDriver

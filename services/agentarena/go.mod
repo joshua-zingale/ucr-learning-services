@@ -18,6 +18,5 @@ require (
 	github.com/jackc/puddle v1.3.0 // indirect
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
 	golang.org/x/crypto v0.20.0 // indirect
-	golang.org/x/exp v0.0.0-20260209203927-2842357ff358
 	golang.org/x/text v0.14.0 // indirect
 )
