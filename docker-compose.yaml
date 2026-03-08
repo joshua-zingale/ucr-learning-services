@@ -3,9 +3,14 @@ services:
     image: nginx
     volumes:
       - ./infrastructure/nginx/snippets/oauth2.snippet.template:/etc/nginx/templates/oauth2.snippet.template:ro
-      - ./services/demo/deploy/demo.conf.template:/etc/nginx/templates/default.conf.template:ro
       - ./infrastructure/oauth2-proxy/deploy/oauth2-proxy.conf.template:/etc/nginx/templates/oauth2-proxy.conf.template:ro
       - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./services/agentarena/deploy/nginx/agentarena.conf.template:/etc/nginx/templates/agentarena.conf.template:ro
+      # - ./services/demo/deploy/demo.conf.template:/etc/nginx/templates/default.conf.template:ro
+    depends_on:
+      - taxis
+      - agentarena
+      # - demo
     ports:
       - "8090:80"
     environment:
@@ -32,9 +37,44 @@ services:
     volumes:
     - ./infrastructure/taxis/taxis.conf:/app/taxis.conf:ro
     - ./groups.yml:/app/groups.yml:ro
+    depends_on:
+      - oauth2-proxy
 
-  demo:
+  # demo:
+  #   build:
+  #     context: ./services/demo
+  
+  postgres:
+    image: postgres:latest
+    volumes: 
+      - ./services/agentarena/db/schema.sql:/docker-entrypoint-initdb.d/01.sql
+      # Uncomment the following volume to add mock data
+      - ./services/agentarena/db/mocks/0001.sql:/docker-entrypoint-initdb.d/02.sql
+    environment:
+      POSTGRES_PASSWORD: agentarena
+      POSTGRES_DB: agentarena
+      POSTGRES_USER: agentarena
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agentarena -d agentarena"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  agentarena:
     build:
-      context: ./services/demo
+      context: ./services/agentarena
+    environment:
+      AGENTARENA_PG_DATABASE: agentarena
+      AGENTARENA_PG_HOST: postgres
+      AGENTARENA_PG_PORT: 5432
+      AGENTARENA_PG_USERNAME: agentarena
+      AGENTARENA_PG_PASSWORD: agentarena
+
+      # Ollama must be running on the host, i.e. outside of Docker
+      AGENTARENA_OLLAMA_URL: http://host.docker.internal:11434
+
+    depends_on:
+      postgres:
+        condition: service_healthy
 
     
