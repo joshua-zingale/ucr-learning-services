@@ -58,7 +58,7 @@ services:
       test: ["CMD-SHELL", "pg_isready -U agentarena -d agentarena"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
 
   agentarena:
     build:
@@ -69,12 +69,33 @@ services:
       AGENTARENA_PG_PORT: 5432
       AGENTARENA_PG_USERNAME: agentarena
       AGENTARENA_PG_PASSWORD: agentarena
-
-      # Ollama must be running on the host, i.e. outside of Docker
-      AGENTARENA_OLLAMA_URL: http://host.docker.internal:11434
+      AGENTARENA_OLLAMA_URL: http://ollama:11434
 
     depends_on:
       postgres:
         condition: service_healthy
+      ollama-pull-gemma:
+        condition: service_completed_successfully
 
-    
+  ollama:
+    image: ollama/ollama
+    volumes:
+      - ./ollama:/root/.ollama
+
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  ollama-pull-gemma:
+    image: ollama/ollama
+    volumes:
+      - ./ollama:/root/.ollama
+    environment:
+      - OLLAMA_HOST=ollama:11434
+    entrypoint: /bin/sh
+    command: "-c 'sleep 5 && ollama pull gemma3:1B'"
+    depends_on:
+      ollama:
+        condition: service_healthy

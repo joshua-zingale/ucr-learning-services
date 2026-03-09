@@ -70,7 +70,7 @@ func (oad *OllamaAgentDriver) Generate(ctx context.Context, config []byte, messa
 	}
 
 	req := ollamaRequest{
-		Model:    "llama3.2:3B",
+		Model:    "gemma3:1B",
 		Messages: ollamaMessages,
 		Stream:   false,
 	}
