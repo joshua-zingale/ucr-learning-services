@@ -28,6 +28,10 @@ are posted to conversation 5 with a POST request to
 The front end presents a user-friendly interface to the RESTful API, serving
 HTML, CSS, and JavaScript.
 
+## Database
+
+Agent Arena uses Postgres as its database. [db/mocks/0001.sql](./db/mocks/0001.sql) may be run to populate the database with mock data to get it working.
+
 ## Agents
 
 One way to provide customizability for AI Agents is to have a robust
@@ -53,6 +57,8 @@ To add support for a new LLM provider, say Anthropic, a new agent class would
 need to be added to the `agent_classes` table and an AgentClassDriver that
 interacts with the Claude API would need to be written as Go code and added to
 the AgentClassDriverRegistry.
+
+
 
 # sqlc
 
@@ -83,3 +89,12 @@ of agents and conversations and the granting and revocation of permissions
 
 The front end is un-styled and poorly organized with JavaScript shipped in the
 same file as the HTML.
+
+Note that something like
+
+```sql
+insert into agent_classes(agent_class_id, name) values
+('ollama', 'Ollama');
+```
+
+must be run on the database before the web server will function because the code currently assumes the existence of `ollama` as an agent class in the database.
