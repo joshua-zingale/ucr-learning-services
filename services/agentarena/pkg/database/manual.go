@@ -36,7 +36,7 @@ func (q *Queries) GetConversation(ctx context.Context, conversationID int32) (Ge
 	return row, nil
 }
 
-func validateSchema(ctx context.Context, schema []byte, object any) error {
+func validateSchema(_ context.Context, schema []byte, object any) error {
 	compiler := jsonschema.NewCompiler()
 	compiler.AddResource("config.json", bytes.NewReader(schema))
 
@@ -54,6 +54,9 @@ func validateSchema(ctx context.Context, schema []byte, object any) error {
 
 // Validates that config matches the json schema of agent's class before updating,
 // returning an error if validation fails.
+//
+// If a validation error occurs, the error will be the error returned by
+// jsonschema.Schema.Validate.
 func (q *Queries) UpdateAgentConfig(ctx context.Context, agent GetAgentRow, config []byte, configSchema []byte) error {
 
 	currentConfig := agent.Config.Bytes
@@ -64,7 +67,7 @@ func (q *Queries) UpdateAgentConfig(ctx context.Context, agent GetAgentRow, conf
 	}
 
 	if err := validateSchema(ctx, configSchema, requestJson); err != nil {
-		return fmt.Errorf("setting config for agent class %s: %w", agent.AgentClassID, err)
+		return err
 	}
 
 	patchedConfig, err := jsonpatch.MergePatch(currentConfig, config)

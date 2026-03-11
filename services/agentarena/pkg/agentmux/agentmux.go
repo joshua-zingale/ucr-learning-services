@@ -11,13 +11,18 @@ import (
 	"log"
 	"net/http"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 
+	reflectjsonschema "github.com/invopop/jsonschema"
 	"github.com/jackc/pgtype"
 	"github.com/joshua-zingale/ucr-learning-services/services/agentarena/pkg/database"
 	"github.com/joshua-zingale/ucr-learning-services/services/agentarena/pkg/functools"
+	"github.com/joshua-zingale/ucr-learning-services/services/agentarena/pkg/qapi"
 	"github.com/joshua-zingale/ucr-learning-services/services/agentarena/pkg/templates"
+	"github.com/santhosh-tekuri/jsonschema/v5"
 )
 
 type AuthService interface {
@@ -56,17 +61,9 @@ type agentArenaHandler struct {
 
 type contextKey int
 
-type idType int
-
 const (
 	idKey contextKey = iota
 )
-
-type setContextFunction func(w http.ResponseWriter, r *http.Request) bool
-type authFunction[AuthData any] func(w http.ResponseWriter, r *http.Request) (AuthData, bool)
-type authzFunction[AuthData any] func(w http.ResponseWriter, r *http.Request, authData AuthData) bool
-type actionFunction[AuthData any, Data any] func(w http.ResponseWriter, r *http.Request, data AuthData) (Data, bool)
-type renderFunction[Data any] func(w http.ResponseWriter, r *http.Request, data Data)
 
 var templ = templates.LoadTemplates()
 
@@ -83,32 +80,103 @@ func NewAiTutorMux(config *AgentArenaConfig) http.Handler {
 
 	fs := http.FileServer(http.Dir(filepath.Join("web", "static")))
 
-	mux.HandleFunc("GET /agents/{agentId}", buildRoute(h.setIdByPathParam("agentId"), h.authenticate, h.authorizeAgentAbility(database.AgentAbilityTypeManage), h.fetchAgentWithConfigAndSchema, renderTemplate[agentWithConfigAndSchema](templ, "agent.html")))
-	mux.HandleFunc("GET /conversations", buildRoute(nil, h.authenticate, nil, h.fetchConversations, renderTemplate[[]database.GetUserConversationsRow](templ, "conversations.html")))
-	mux.HandleFunc("GET /conversations/{conversationId}", buildRoute(h.setIdByPathParam("conversationId"), h.authenticate, h.authorizeStartedConversation, h.fetchConversation, renderTemplate[database.GetConversationRow](templ, "conversation.html")))
+	mux.HandleFunc("GET /agents/{agentId}", qapi.QApi(qapi.QApiParams[UserProfile, int32, agentWithConfigAndSchema]{
+		Auth:        h.authenticate,
+		Read:        setIdByPathParam("agentId"),
+		Authz:       h.authorizeAgentAbility(database.AgentAbilityTypeManage),
+		Act:         h.fetchAgentWithConfigAndSchema,
+		Render:      renderTemplate[agentWithConfigAndSchema](templ, "agent.html"),
+		RenderError: renderErrorAsHtml,
+	}))
+	mux.HandleFunc("GET /conversations", qapi.QApi(qapi.QApiParams[UserProfile, struct{}, []database.GetUserConversationsRow]{
+		Auth:        h.authenticate,
+		Read:        nil,
+		Authz:       nil,
+		Act:         h.fetchUserConversations,
+		Render:      renderTemplate[[]database.GetUserConversationsRow](templ, "conversations.html"),
+		RenderError: renderErrorAsHtml,
+	}))
+	mux.HandleFunc("GET /conversations/{conversationId}", qapi.QApi(qapi.QApiParams[UserProfile, int32, database.GetConversationRow]{
+		Auth:        h.authenticate,
+		Read:        setIdByPathParam("conversationId"),
+		Authz:       h.authorizeStartedConversation,
+		Act:         h.fetchConversation,
+		Render:      renderTemplate[database.GetConversationRow](templ, "conversation.html"),
+		RenderError: renderErrorAsHtml,
+	}))
+
 	mux.Handle("GET /static/", http.StripPrefix("/static", fs))
 
-	mux.HandleFunc("GET /api/agents/{agentId}", buildRoute(h.setIdByPathParam("agentId"), h.authenticate, h.authorizeAgentAbility(database.AgentAbilityTypeManage), h.fetchAgent, renderJson))
-	mux.HandleFunc("PATCH /api/agents/{agentId}", buildRoute(h.setIdByPathParam("agentId"), h.authenticate, h.authorizeAgentAbility(database.AgentAbilityTypeManage), h.editAgent, respondWithCode[struct{}](http.StatusNoContent)))
+	mux.HandleFunc("GET /api/agents/{agentId}", qapi.QApi(qapi.QApiParams[UserProfile, int32, database.GetAgentRow]{
+		Auth:        h.authenticate,
+		Read:        setIdByPathParam("agentId"),
+		Authz:       h.authorizeAgentAbility(database.AgentAbilityTypeManage),
+		Act:         h.fetchAgent,
+		Render:      renderJson[database.GetAgentRow],
+		RenderError: renderErrorAsJson,
+	}))
 
-	mux.HandleFunc("POST /api/agents", buildRoute(nil, h.authenticate, h.authorizeGroup("agentarena.agentcreator"), h.createAgentWithManager, renderJson))
+	mux.HandleFunc("PATCH /api/agents/{agentId}", qapi.QApi(qapi.QApiParams[UserProfile, editAgentParams, struct{}]{
+		Auth:        h.authenticate,
+		Read:        readEditAgentParams,
+		Authz:       mapReq(h.authorizeAgentAbility(database.AgentAbilityTypeManage), func(eap editAgentParams) int32 { return eap.AgentId }),
+		Act:         h.editAgent,
+		RenderError: renderErrorAsJson,
+	}))
+	mux.HandleFunc("POST /api/agents", qapi.QApi(qapi.QApiParams[UserProfile, createAgentWithManagerRequest, createAgentWithManagerResponse]{
+		Auth:        h.authenticate,
+		Read:        readJson[createAgentWithManagerRequest],
+		Authz:       authorizeGroup[createAgentWithManagerRequest]("agentarena.agentcreator"),
+		Act:         h.createAgentWithManager,
+		Render:      renderJson[createAgentWithManagerResponse],
+		RenderError: renderErrorAsJson,
+	}))
 
-	mux.HandleFunc("GET /api/me/conversations", buildRoute(nil, h.authenticate, nil, h.fetchConversations, renderJson))
-	mux.HandleFunc("POST /api/me/conversations", buildRoute(h.setAgentIdInJsonId, h.authenticate, h.authorizeAgentAbility(database.AgentAbilityTypeInteract), h.createConversation, renderJson))
+	mux.HandleFunc("GET /api/me/conversations", qapi.QApi(qapi.QApiParams[UserProfile, struct{}, []database.GetUserConversationsRow]{
+		Auth:        h.authenticate,
+		Read:        nil,
+		Authz:       nil,
+		Act:         h.fetchUserConversations,
+		Render:      renderJson[[]database.GetUserConversationsRow],
+		RenderError: renderErrorAsJson,
+	}))
 
-	mux.HandleFunc("GET /api/conversations/{conversationId}/messages", buildRoute(h.setIdByPathParam("conversationId"), h.authenticate, h.authorizeStartedConversation, h.fetchConversationMessages, renderJson))
-	mux.HandleFunc("POST /api/conversations/{conversationId}/messages", buildRoute(h.setIdByPathParam("conversationId"), h.authenticate, h.authorizeStartedConversation, h.createMessage, renderJson))
+	mux.HandleFunc("POST /api/me/conversations", qapi.QApi(qapi.QApiParams[UserProfile, createConversationRequest, database.CreateConversationWithInitialMessageRow]{
+		Auth:        h.authenticate,
+		Read:        readJson[createConversationRequest],
+		Authz:       mapReq(h.authorizeAgentAbility(database.AgentAbilityTypeInteract), func(ccr createConversationRequest) int32 { return ccr.AgentID }),
+		Act:         h.createConversation,
+		Render:      renderJson[database.CreateConversationWithInitialMessageRow],
+		RenderError: renderErrorAsJson,
+	}))
+
+	mux.HandleFunc("GET /api/conversations/{conversationId}/messages", qapi.QApi(qapi.QApiParams[UserProfile, int32, []database.GetConversationMessagesRow]{
+		Auth:        h.authenticate,
+		Read:        setIdByPathParam("conversationId"),
+		Authz:       h.authorizeStartedConversation,
+		Act:         h.fetchConversationMessages,
+		Render:      renderJson[[]database.GetConversationMessagesRow],
+		RenderError: renderErrorAsJson,
+	}))
+
+	mux.HandleFunc("POST /api/conversations/{conversationId}/messages", qapi.QApi(qapi.QApiParams[UserProfile, createMessageRequest, database.PostMessageToConversationRow]{
+		Auth:        h.authenticate,
+		Read:        readJsonWithAugment(setIdByPathParam("conversationId"), func(i int32, cmr *createMessageRequest) { cmr.ConversationId = i }),
+		Authz:       mapReq(h.authorizeStartedConversation, func(cmr createMessageRequest) int32 { return cmr.ConversationId }),
+		Act:         h.createMessage,
+		Render:      renderJson[database.PostMessageToConversationRow],
+		RenderError: renderErrorAsJson,
+	}))
 
 	return mux
 }
 
-func (ath *agentArenaHandler) fetchConversations(w http.ResponseWriter, r *http.Request, profile UserProfile) ([]database.GetUserConversationsRow, bool) {
-	conversations, err := ath.Db.GetUserConversations(r.Context(), profile.UserId)
+func (ath *agentArenaHandler) fetchUserConversations(ctx context.Context, profile UserProfile, _ struct{}) ([]database.GetUserConversationsRow, error) {
+	conversations, err := ath.Db.GetUserConversations(ctx, profile.UserId)
 	if err != nil {
-		ath.internalError(w, r, err)
-		return nil, false
+		return nil, &internalError{}
 	}
-	return conversations, true
+	return conversations, nil
 }
 
 type createConversationRequest struct {
@@ -117,41 +185,28 @@ type createConversationRequest struct {
 	AgentID          int32  `json:"agentId"`
 }
 
-func (ath *agentArenaHandler) createConversation(w http.ResponseWriter, r *http.Request, profile UserProfile) (database.CreateConversationWithInitialMessageRow, bool) {
-	var resp database.CreateConversationWithInitialMessageRow
-	var req createConversationRequest
-
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		ath.badRequest(w, r, fmt.Sprintf("parsing JSON: %s", err.Error()))
-		return resp, false
-	}
-
-	createdData, err := ath.Db.CreateConversationWithInitialMessage(r.Context(), database.CreateConversationWithInitialMessageParams{
+func (ath *agentArenaHandler) createConversation(ctx context.Context, profile UserProfile, req createConversationRequest) (database.CreateConversationWithInitialMessageRow, error) {
+	createdData, err := ath.Db.CreateConversationWithInitialMessage(ctx, database.CreateConversationWithInitialMessageParams{
 		MessageContent:   req.MessageContent,
 		UserID:           profile.UserId,
 		ConversationName: req.ConversationName,
 		AgentID:          sql.NullInt32{Int32: req.AgentID, Valid: true},
 	})
 	if err != nil {
-		ath.badRequest(w, r, "could not create conversation with message")
-		log.Printf("creating conversation: %s", err.Error())
-		return resp, false
+		return createdData, &internalError{err}
 	}
-	return createdData, true
+	return createdData, nil
 
 }
 
-func (ath *agentArenaHandler) fetchAgent(w http.ResponseWriter, r *http.Request, _ UserProfile) (database.GetAgentRow, bool) {
+func (ath *agentArenaHandler) fetchAgent(ctx context.Context, _ UserProfile, agentId int32) (database.GetAgentRow, error) {
 
-	agentId := r.Context().Value(idKey).(idType)
-
-	agent, err := ath.Db.GetAgent(r.Context(), int32(agentId))
+	agent, err := ath.Db.GetAgent(ctx, agentId)
 	if err != nil {
-		ath.notFoundError(w, r)
-		return agent, false
+		return agent, &notFoundError{}
 	}
 
-	return agent, true
+	return agent, nil
 }
 
 type createAgentWithManagerRequest struct {
@@ -160,42 +215,38 @@ type createAgentWithManagerRequest struct {
 	Config       any    `json:"config"`
 }
 
-func (ath *agentArenaHandler) createAgentWithManager(w http.ResponseWriter, r *http.Request, profile UserProfile) (int32, bool) {
-	var req createAgentWithManagerRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		ath.badRequest(w, r, "invalid JSON data")
-		return 0, false
-	}
+type createAgentWithManagerResponse struct {
+	AgentId int32 `json:"agentId"`
+}
 
+func (ath *agentArenaHandler) createAgentWithManager(ctx context.Context, manager UserProfile, req createAgentWithManagerRequest) (createAgentWithManagerResponse, error) {
+	var resp createAgentWithManagerResponse
 	var config pgtype.JSONB
 	if err := config.Set(req.Config); err != nil {
-		ath.internalError(w, r, err)
-		return 0, false
+		return resp, &internalError{err}
 	}
 	driver, ok := ath.AgentClassDriverRegistry.GetFromId(req.AgentClassID)
 	if !ok {
-		ath.badRequest(w, r, fmt.Sprintf("invalid agent class '%s'", req.AgentClassID))
-		return 0, false
+		return resp, fmt.Errorf("invalid agent class '%s'", req.AgentClassID)
 	}
 
-	schema, err := driver.GetJsonSchemaRaw(r.Context())
+	schema, err := driver.GetJsonSchemaRaw(ctx)
 	if err != nil {
-		ath.internalError(w, r, err)
-		return 0, false
+		return resp, &internalError{err}
 	}
 
-	agentId, err := ath.Db.CreateAgentWithManagerAndInteractor(r.Context(), schema, database.CreateAgentWithManagerAndInteractor{
+	agentId, err := ath.Db.CreateAgentWithManagerAndInteractor(ctx, schema, database.CreateAgentWithManagerAndInteractor{
 		Name:         req.Name,
 		AgentClassID: req.AgentClassID,
 		Config:       config,
-		UserID:       profile.UserId,
+		UserID:       manager.UserId,
 	})
 	if err != nil {
-		ath.internalError(w, r, err)
-		return 0, false
+		return resp, &internalError{err}
 	}
 
-	return agentId, true
+	resp.AgentId = agentId
+	return resp, nil
 }
 
 type agentWithConfigAndSchema struct {
@@ -205,24 +256,22 @@ type agentWithConfigAndSchema struct {
 	ConfigSchema string
 }
 
-func (ath *agentArenaHandler) fetchAgentWithConfigAndSchema(w http.ResponseWriter, r *http.Request, userProfile UserProfile) (agentWithConfigAndSchema, bool) {
+func (ath *agentArenaHandler) fetchAgentWithConfigAndSchema(ctx context.Context, userProfile UserProfile, agentId int32) (agentWithConfigAndSchema, error) {
 	var awcas agentWithConfigAndSchema
 
-	agent, ok := ath.fetchAgent(w, r, userProfile)
-	if !ok {
-		return awcas, false
+	agent, err := ath.fetchAgent(ctx, userProfile, agentId)
+	if err != nil {
+		return awcas, err
 	}
 
 	driver, ok := ath.AgentClassDriverRegistry.GetFromId(agent.AgentClassID)
 	if !ok {
-		ath.internalError(w, r, fmt.Errorf("missing config schema for agent class %s", agent.AgentClassID))
-		return awcas, false
+		return awcas, &internalError{fmt.Errorf("missing config schema for agent class %s", agent.AgentClassID)}
 	}
 
-	configSchema, err := driver.GetJsonSchemaRaw(r.Context())
+	configSchema, err := driver.GetJsonSchemaRaw(ctx)
 	if err != nil {
-		ath.internalError(w, r, err)
-		return awcas, false
+		return awcas, &internalError{err}
 	}
 
 	awcas.AgentID = agent.AgentID
@@ -230,120 +279,120 @@ func (ath *agentArenaHandler) fetchAgentWithConfigAndSchema(w http.ResponseWrite
 	awcas.Config = string(agent.Config.Bytes)
 	awcas.ConfigSchema = string(configSchema)
 
-	return awcas, true
+	return awcas, nil
 }
 
-func (ath *agentArenaHandler) editAgent(w http.ResponseWriter, r *http.Request, _ UserProfile) (struct{}, bool) {
+type editAgentParams struct {
+	AgentId int32  `json:"agentId"`
+	Config  []byte `json:"config"`
+}
 
-	agentId := r.Context().Value(idKey).(idType)
-
-	requestBody, err := io.ReadAll(r.Body)
+func readEditAgentParams(r *http.Request) (editAgentParams, error) {
+	var p editAgentParams
+	id, err := setIdByPathParam("agentId")(r)
 	if err != nil {
-		return struct{}{}, false
+		return p, err
 	}
-
-	agent, err := ath.Db.GetAgent(r.Context(), int32(agentId))
+	config, err := io.ReadAll(r.Body)
 	if err != nil {
-		ath.badRequest(w, r, fmt.Sprintf("Invalid agent_id: %d", agentId))
-		return struct{}{}, false
+		return p, &internalError{err}
+	}
+	p.AgentId = id
+	p.Config = config
+	return p, nil
+}
+
+func (ath *agentArenaHandler) editAgent(ctx context.Context, _ UserProfile, p editAgentParams) (struct{}, error) {
+
+	agent, err := ath.Db.GetAgent(ctx, p.AgentId)
+	if err != nil {
+		return struct{}{}, &notFoundError{}
 	}
 
 	driver, ok := ath.AgentClassDriverRegistry.GetFromId(agent.AgentClassID)
 	if !ok {
-		ath.internalError(w, r, fmt.Errorf("missing driver for agent class with id %s", agent.AgentClassID))
-		return struct{}{}, false
+		return struct{}{}, &internalError{fmt.Errorf("missing driver for agent class with id %s", agent.AgentClassID)}
 	}
 
-	schema, err := driver.GetJsonSchemaRaw(r.Context())
+	schema, err := driver.GetJsonSchemaRaw(ctx)
 	if err != nil {
-		ath.internalError(w, r, err)
-		return struct{}{}, false
+		return struct{}{}, &internalError{err}
 	}
 
-	if err = ath.Db.UpdateAgentConfig(r.Context(), agent, requestBody, schema); err != nil {
-		ath.badRequest(w, r, err.Error())
-		return struct{}{}, false
+	if err = ath.Db.UpdateAgentConfig(ctx, agent, p.Config, schema); err != nil {
+		switch err.(type) {
+		case *jsonschema.ValidationError:
+			return struct{}{}, err
+		default:
+			return struct{}{}, &internalError{err}
+		}
+
 	}
 
-	return struct{}{}, true
+	return struct{}{}, nil
 }
 
-func (ath *agentArenaHandler) fetchConversationMessages(w http.ResponseWriter, r *http.Request, _ UserProfile) ([]database.GetConversationMessagesRow, bool) {
-	conversationId := r.Context().Value(idKey).(idType)
+func (ath *agentArenaHandler) fetchConversationMessages(ctx context.Context, _ UserProfile, conversationId int32) ([]database.GetConversationMessagesRow, error) {
 
-	messages, err := ath.Db.GetConversationMessages(r.Context(), int32(conversationId))
+	messages, err := ath.Db.GetConversationMessages(ctx, conversationId)
 	if err != nil {
-		ath.internalError(w, r, err)
-		return messages, false
+		return messages, &internalError{err}
 	}
 
-	return messages, true
+	return messages, nil
 }
 
-func (ath *agentArenaHandler) fetchConversation(w http.ResponseWriter, r *http.Request, _ UserProfile) (database.GetConversationRow, bool) {
-	conversationId := r.Context().Value(idKey).(idType)
+func (ath *agentArenaHandler) fetchConversation(ctx context.Context, _ UserProfile, conversationId int32) (database.GetConversationRow, error) {
 
-	conversation, err := ath.Db.GetConversation(r.Context(), int32(conversationId))
+	conversation, err := ath.Db.GetConversation(ctx, conversationId)
 	if err != nil {
-		ath.internalError(w, r, err)
-		return conversation, false
+		return conversation, &internalError{err}
 	}
 
-	return conversation, true
+	return conversation, nil
 }
 
 type createMessageRequest struct {
-	MessageType database.MessageType `json:"messageType"`
-	Content     string               `json:"content,omitempty"`
+	ConversationId int32                `json:"conversationId,omitempty"`
+	MessageType    database.MessageType `json:"messageType"`
+	Content        string               `json:"content,omitempty"`
 }
 
-func (ath *agentArenaHandler) createMessage(w http.ResponseWriter, r *http.Request, userProfile UserProfile) (database.PostMessageToConversationRow, bool) {
-	conversationId := r.Context().Value(idKey).(idType)
+func (ath *agentArenaHandler) createMessage(ctx context.Context, userProfile UserProfile, req createMessageRequest) (database.PostMessageToConversationRow, error) {
 
 	var newMessage database.PostMessageToConversationRow
 
-	var msgReq createMessageRequest
-	if err := json.NewDecoder(r.Body).Decode(&msgReq); err != nil {
-		ath.badRequest(w, r, "invalid json")
-		return newMessage, false
-	}
-
-	switch msgReq.MessageType {
+	switch req.MessageType {
 	case database.MessageTypeUser:
-		if strings.TrimSpace(msgReq.Content) == "" {
-			ath.badRequest(w, r, "message content cannot be empty")
-			return newMessage, false
+		if strings.TrimSpace(req.Content) == "" {
+			return newMessage, fmt.Errorf("cannot post empty message")
 		}
-		userMessage, err := ath.Db.PostMessageToConversation(r.Context(), database.PostMessageToConversationParams{
-			ConversationID: int32(conversationId),
-			Content:        msgReq.Content,
+		userMessage, err := ath.Db.PostMessageToConversation(ctx, database.PostMessageToConversationParams{
+			ConversationID: req.ConversationId,
+			Content:        req.Content,
 			MessageType:    database.MessageTypeUser,
 			UserID:         sql.NullString{String: userProfile.UserId, Valid: true},
 		})
 
 		if err != nil {
-			ath.internalError(w, r, err)
-			return userMessage, false
+			return userMessage, &internalError{err}
 		}
 
-		return userMessage, true
+		return userMessage, nil
 	case database.MessageTypeAgent:
-		agentConfig, err := ath.Db.GetAgentConfigFromConversationId(r.Context(), int32(conversationId))
+		agentConfig, err := ath.Db.GetAgentConfigFromConversationId(ctx, req.ConversationId)
 		if err != nil {
-			ath.internalError(w, r, fmt.Errorf("getting config %d %w", conversationId, err))
-			return newMessage, false
+			return newMessage, &internalError{fmt.Errorf("getting config %d %w", req.ConversationId, err)}
 		}
 
 		agentDriver, ok := ath.AgentClassDriverRegistry.GetFromId(agentConfig.AgentClassID)
 		if !ok {
-			ath.internalError(w, r, fmt.Errorf("getting agent driver %w", err))
-			return newMessage, false
+			return newMessage, &internalError{fmt.Errorf("getting agent driver: %w", err)}
 		}
 
-		messages, err := ath.Db.GetConversationMessages(r.Context(), int32(conversationId))
+		messages, err := ath.Db.GetConversationMessages(ctx, req.ConversationId)
 		if err != nil {
-			ath.internalError(w, r, fmt.Errorf("getting conversation messages %w", err))
-			return newMessage, false
+			return newMessage, &internalError{fmt.Errorf("getting conversation messages: %w", err)}
 		}
 
 		chatMessages := functools.Map(messages, func(m database.GetConversationMessagesRow) ChatMessage {
@@ -352,103 +401,173 @@ func (ath *agentArenaHandler) createMessage(w http.ResponseWriter, r *http.Reque
 				Content:     m.Content,
 			}
 		})
-		agentMessageContent, err := agentDriver.Generate(r.Context(), agentConfig.Config.Bytes, chatMessages)
+		agentMessageContent, err := agentDriver.Generate(ctx, agentConfig.Config.Bytes, chatMessages)
 		if err != nil {
-			ath.internalError(w, r, err)
-			return newMessage, false
+			return newMessage, &internalError{err}
 		}
 
-		agentMessage, err := ath.Db.PostMessageToConversation(r.Context(), database.PostMessageToConversationParams{
-			ConversationID: int32(conversationId),
+		agentMessage, err := ath.Db.PostMessageToConversation(ctx, database.PostMessageToConversationParams{
+			ConversationID: req.ConversationId,
 			Content:        agentMessageContent,
 			MessageType:    database.MessageTypeAgent,
 			AgentID:        sql.NullInt32{Int32: agentConfig.AgentID, Valid: true},
 		})
 
 		if err != nil {
-			ath.internalError(w, r, err)
-			return agentMessage, false
+			return agentMessage, &internalError{err}
 		}
 
-		return agentMessage, true
+		return agentMessage, nil
 	default:
-		ath.badRequest(w, r, "invalid message type")
-		return newMessage, false
+		return newMessage, fmt.Errorf("bad message type '%s'", req.MessageType)
 	}
 
 }
 
-func (ath *agentArenaHandler) authenticate(w http.ResponseWriter, r *http.Request) (UserProfile, bool) {
+func (ath *agentArenaHandler) authenticate(r *http.Request) (UserProfile, error) {
 	var profile UserProfile
 	var err error
 	profile, err = ath.Auth.Authenticate(r)
 	if err != nil {
-		ath.unauthorizedError(w, r)
-		return profile, false
+		return profile, &unauthorizedError{}
 	}
-
-	return profile, true
+	return profile, nil
 }
 
-func (ath *agentArenaHandler) authorizeGroup(group string) authzFunction[UserProfile] {
-	return func(w http.ResponseWriter, r *http.Request, profile UserProfile) bool {
-
+func authorizeGroup[Any any](group string) qapi.AuthzFunction[UserProfile, Any] {
+	return func(_ context.Context, profile UserProfile, _ Any) error {
 		for _, userGroup := range profile.UserGroups {
 			if group == userGroup {
-				return true
+				return nil
 			}
 		}
 
-		ath.forbiddenError(w, r)
-		return false
+		return &forbiddenError{}
 	}
 }
 
-func (ath *agentArenaHandler) authorizeAgentAbility(ability database.AgentAbilityType) authzFunction[UserProfile] {
-	return func(w http.ResponseWriter, r *http.Request, profile UserProfile) bool {
-		agentId := r.Context().Value(idKey).(idType)
-		hasPermission, err := ath.Db.HasAgentPermission(r.Context(), database.HasAgentPermissionParams{
+func readJsonWithAugment[Aug, Req any](agumentFetcher qapi.ReadRequestFunction[Aug], augmenter func(Aug, *Req)) qapi.ReadRequestFunction[Req] {
+	return func(r *http.Request) (Req, error) {
+		var req Req
+
+		aug, err := agumentFetcher(r)
+		if err != nil {
+			return req, err
+		}
+
+		req, err = readJson[Req](r)
+		if err != nil {
+			return req, err
+		}
+
+		augmenter(aug, &req)
+
+		return req, nil
+	}
+}
+
+var schemaCache sync.Map
+
+func readJson[Req any](r *http.Request) (Req, error) {
+	var req Req
+
+	t := reflect.TypeOf(req)
+	compiled, err := getOrCompileSchema(t)
+	if err != nil {
+		return req, fmt.Errorf("schema compilation error: %w", err)
+	}
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return req, fmt.Errorf("reading request body: %w", err)
+	}
+	defer r.Body.Close()
+
+	var v any
+	if err := json.Unmarshal(body, &v); err != nil {
+		return req, fmt.Errorf("malformed json: %w", err)
+	}
+
+	if err := compiled.Validate(v); err != nil {
+		return req, err
+	}
+
+	if err := json.Unmarshal(body, &req); err != nil {
+		return req, fmt.Errorf("unmarshaling to struct: %w", err)
+	}
+
+	return req, nil
+}
+
+func getOrCompileSchema(t reflect.Type) (*jsonschema.Schema, error) {
+	if cached, ok := schemaCache.Load(t); ok {
+		return cached.(*jsonschema.Schema), nil
+	}
+
+	reflector := &reflectjsonschema.Reflector{
+		AllowAdditionalProperties: false,
+		DoNotReference:            true,
+	}
+	schemaObj := reflector.ReflectFromType(t)
+	schemaBytes, _ := json.Marshal(schemaObj)
+
+	compiler := jsonschema.NewCompiler()
+	if err := compiler.AddResource("schema.json", bytes.NewReader(schemaBytes)); err != nil {
+		return nil, err
+	}
+
+	compiled, err := compiler.Compile("schema.json")
+	if err != nil {
+		return nil, err
+	}
+
+	schemaCache.Store(t, compiled)
+	return compiled, nil
+}
+
+func mapReq[Any, Req1, Req2 any](fn qapi.AuthzFunction[Any, Req1], mapper func(Req2) Req1) qapi.AuthzFunction[Any, Req2] {
+	return func(ctx context.Context, a Any, r Req2) error {
+		return fn(ctx, a, mapper(r))
+	}
+}
+
+func (ath *agentArenaHandler) authorizeAgentAbility(ability database.AgentAbilityType) qapi.AuthzFunction[UserProfile, int32] {
+	return func(ctx context.Context, profile UserProfile, agentId int32) error {
+		hasPermission, err := ath.Db.HasAgentPermission(ctx, database.HasAgentPermissionParams{
 			UserID:   profile.UserId,
 			GroupIds: profile.UserGroups,
-			AgentID:  int32(agentId),
+			AgentID:  agentId,
 			Ability:  ability,
 		})
 		if err != nil {
-			ath.internalError(w, r, err)
-			return false
+			return &internalError{err}
 		}
 		if hasPermission {
-			return true
+			return nil
 		}
-		ath.forbiddenError(w, r)
-		return false
+		return &forbiddenError{}
 	}
 
 }
 
-func (ath *agentArenaHandler) authorizeStartedConversation(w http.ResponseWriter, r *http.Request, profile UserProfile) bool {
-	conversationId := r.Context().Value(idKey).(idType)
-
-	if hasPermission, err := ath.Db.StartedConversation(r.Context(), database.StartedConversationParams{
+func (ath *agentArenaHandler) authorizeStartedConversation(ctx context.Context, profile UserProfile, conversationId int32) error {
+	if hasPermission, err := ath.Db.StartedConversation(ctx, database.StartedConversationParams{
 		ConversationID: int32(conversationId),
 		UserID:         profile.UserId,
 	}); err != nil || !hasPermission {
-		ath.forbiddenError(w, r)
-		return false
+		return &forbiddenError{}
 	}
 
-	return true
+	return nil
 }
 
-func (ath *agentArenaHandler) setIdByPathParam(pathParamName string) setContextFunction {
-	return func(w http.ResponseWriter, r *http.Request) bool {
+func setIdByPathParam(pathParamName string) qapi.ReadRequestFunction[int32] {
+	return func(r *http.Request) (int32, error) {
 		id, err := strconv.ParseInt(r.PathValue(pathParamName), 10, 64)
 		if err != nil {
-			ath.notFoundError(w, r)
-			return false
+			return 0, fmt.Errorf("invalid integer ID as path parameter")
 		}
-		(*r) = *r.WithContext(context.WithValue(r.Context(), idKey, idType(id)))
-		return true
+		return int32(id), nil
 	}
 
 }
@@ -457,65 +576,90 @@ type agentIdJson struct {
 	AgentId int32 `json:"agentId"`
 }
 
-func (ath *agentArenaHandler) setAgentIdInJsonId(w http.ResponseWriter, r *http.Request) bool {
+func renderJson[T any](_ context.Context, w http.ResponseWriter, data T) {
+	respondJson(w, data)
+}
 
-	bodyBytes, err := io.ReadAll(r.Body)
-	if err != nil {
-		ath.internalError(w, r, err)
-		return false
+type errorMessage struct {
+	Error string `json:"error"`
+}
+
+func renderErrorAsJson(_ context.Context, w http.ResponseWriter, data error) {
+	w.Header().Set("Content-Type", "application/json")
+
+	var msg any
+
+	switch data.(type) {
+	case *jsonschema.ValidationError:
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		msg = map[string]any{
+			"error":  "validation_failed",
+			"fields": extractLeafErrors(data),
+		}
+	case *internalError:
+		w.WriteHeader(http.StatusInternalServerError)
+		msg = errorMessage{"Internal Error"}
+		log.Print(data.Error())
+	case *forbiddenError:
+		w.WriteHeader(http.StatusForbidden)
+		msg = errorMessage{data.Error()}
+	case *unauthorizedError:
+		w.WriteHeader(http.StatusUnauthorized)
+		msg = errorMessage{data.Error()}
+	default:
+		w.WriteHeader(http.StatusBadRequest)
+		msg = errorMessage{data.Error()}
 	}
-	defer r.Body.Close()
-
-	var agentIdJson agentIdJson
-
-	if err := json.Unmarshal(bodyBytes, &agentIdJson); err != nil {
-		ath.badRequest(w, r, err.Error())
-		return false
-	}
-
-	(*r) = *r.WithContext(context.WithValue(r.Context(), idKey, idType(agentIdJson.AgentId)))
-	r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-
-	return true
+	respondJson(w, msg)
 }
 
-func (ath *agentArenaHandler) unauthorizedError(w http.ResponseWriter, _ *http.Request) {
-	http.Error(w, "Unauthorized", http.StatusUnauthorized)
-}
+func renderErrorAsHtml(_ context.Context, w http.ResponseWriter, data error) {
+	w.Header().Set("Content-Type", "text/html")
 
-func (ath *agentArenaHandler) forbiddenError(w http.ResponseWriter, _ *http.Request) {
-	http.Error(w, "Forbidden", http.StatusForbidden)
-}
-
-func (ath *agentArenaHandler) notFoundError(w http.ResponseWriter, _ *http.Request) {
-	http.Error(w, "Not Found", http.StatusNotFound)
-}
-
-func (ath *agentArenaHandler) badRequest(w http.ResponseWriter, _ *http.Request, msg string) {
-	http.Error(w, fmt.Sprintf("Bad Request: %s", msg), http.StatusBadRequest)
-}
-
-func (ath *agentArenaHandler) internalError(w http.ResponseWriter, _ *http.Request, err error) {
-	log.Printf("Internal Server Error: %s", err.Error())
-	http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-}
-
-func respondWithCode[D any](code int) renderFunction[D] {
-	return func(w http.ResponseWriter, r *http.Request, data D) {
-		w.WriteHeader(code)
+	switch data.(type) {
+	case *internalError:
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Internal Error"))
+		log.Print(data.Error())
+	case *forbiddenError:
+		w.WriteHeader(http.StatusForbidden)
+		w.Write([]byte(data.Error()))
+	case *unauthorizedError:
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte(data.Error()))
+	default:
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(data.Error()))
 	}
 }
 
-func renderJson[T any](w http.ResponseWriter, r *http.Request, data T) {
-	if acceptsJson(r) {
-		respondJson(w, data)
-		return
+func extractLeafErrors(err error) map[string]string {
+	flat := make(map[string]string)
+
+	var walk func(e *jsonschema.ValidationError)
+	walk = func(e *jsonschema.ValidationError) {
+		if len(e.Causes) == 0 {
+
+			key := e.InstanceLocation
+			if key == "" {
+				key = "root"
+			}
+			flat[key] = e.Message
+		} else {
+			for _, cause := range e.Causes {
+				walk(cause)
+			}
+		}
 	}
-	http.Error(w, "Not Acceptable: JSON", http.StatusNotAcceptable)
+
+	if ve, ok := err.(*jsonschema.ValidationError); ok {
+		walk(ve)
+	}
+	return flat
 }
 
-func renderTemplate[T any](tmpl *template.Template, name string) renderFunction[T] {
-	return func(w http.ResponseWriter, r *http.Request, data T) {
+func renderTemplate[T any](tmpl *template.Template, name string) qapi.RenderFunction[T] {
+	return func(_ context.Context, w http.ResponseWriter, data T) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		err := tmpl.ExecuteTemplate(w, name, data)
 		if err != nil {
@@ -525,41 +669,38 @@ func renderTemplate[T any](tmpl *template.Template, name string) renderFunction[
 	}
 }
 
-func acceptsJson(r *http.Request) bool {
-	return strings.Contains(r.Header.Get("Accept"), "application/json") || strings.Contains(r.Header.Get("Accept"), "*/*")
-}
-
 func respondJson[T any](w http.ResponseWriter, v T) {
 	w.Header().Set("Content-Type", "application/json")
 	enc := json.NewEncoder(w)
 	enc.Encode(v)
 }
 
-func buildRoute[AuthData, Data any](contextFunction setContextFunction, auth authFunction[AuthData], authz authzFunction[AuthData], fetch actionFunction[AuthData, Data], render renderFunction[Data]) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if contextFunction != nil && !contextFunction(w, r) {
-			return
-		}
+type unauthorizedError struct{}
 
-		var authData AuthData
-		var ok bool
+func (ue *unauthorizedError) Error() string {
+	return "Unauthorized"
+}
 
-		if auth != nil {
-			if authData, ok = auth(w, r); !ok {
-				return
-			}
-		}
+type forbiddenError struct{}
 
-		if authz != nil && !authz(w, r, authData) {
-			return
-		}
+func (fe *forbiddenError) Error() string {
+	return "Forbidden"
+}
 
-		var data Data
-		if fetch != nil {
-			if data, ok = fetch(w, r, authData); !ok {
-				return
-			}
-		}
-		render(w, r, data)
+type internalError struct {
+	InternalError error
+}
+
+func (ie *internalError) Error() string {
+
+	if ie.InternalError != nil {
+		return fmt.Sprintf("Internal Error: %s", ie.InternalError.Error())
 	}
+	return "Internal Error"
+}
+
+type notFoundError struct{}
+
+func (nfe *notFoundError) Error() string {
+	return "Not Found"
 }
