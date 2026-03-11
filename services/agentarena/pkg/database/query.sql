@@ -55,6 +55,28 @@ from conversations c
 where c.conversation_id = $1
 limit 1;
 
+-- name: CreateConversationWithInitialMessage :one
+WITH new_conv AS (
+    INSERT INTO conversations (user_id, name, active_agent_id)
+    VALUES (@user_id, @conversation_name, @agent_id)
+    RETURNING conversation_id, user_id, active_agent_id
+)
+INSERT INTO messages (
+    conversation_id, 
+    content, 
+    message_type, 
+    user_id, 
+    agent_id
+)
+SELECT 
+    new_conv.conversation_id, 
+    @message_content, 
+    'user',
+    new_conv.user_id, 
+    NULL            -- agent_id is null for user messages
+FROM new_conv
+RETURNING conversation_id, message_id;
+
 -- name: PostMessageToConversation :one
 insert into messages (conversation_id, content, message_type, agent_id, user_id) values
 (@conversation_id, @content, @message_type, @agent_id, @user_id)

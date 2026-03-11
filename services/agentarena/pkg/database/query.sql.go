@@ -12,6 +12,53 @@ import (
 	"github.com/jackc/pgtype"
 )
 
+const createConversationWithInitialMessage = `-- name: CreateConversationWithInitialMessage :one
+WITH new_conv AS (
+    INSERT INTO conversations (user_id, name, active_agent_id)
+    VALUES ($2, $3, $4)
+    RETURNING conversation_id, user_id, active_agent_id
+)
+INSERT INTO messages (
+    conversation_id, 
+    content, 
+    message_type, 
+    user_id, 
+    agent_id
+)
+SELECT 
+    new_conv.conversation_id, 
+    $1, 
+    'user',
+    new_conv.user_id, 
+    NULL            -- agent_id is null for user messages
+FROM new_conv
+RETURNING conversation_id, message_id
+`
+
+type CreateConversationWithInitialMessageParams struct {
+	MessageContent   string        `json:"messageContent"`
+	UserID           string        `json:"userId"`
+	ConversationName string        `json:"conversationName"`
+	AgentID          sql.NullInt32 `json:"agentId"`
+}
+
+type CreateConversationWithInitialMessageRow struct {
+	ConversationID int32 `json:"conversationId"`
+	MessageID      int32 `json:"messageId"`
+}
+
+func (q *Queries) CreateConversationWithInitialMessage(ctx context.Context, arg CreateConversationWithInitialMessageParams) (CreateConversationWithInitialMessageRow, error) {
+	row := q.db.QueryRow(ctx, createConversationWithInitialMessage,
+		arg.MessageContent,
+		arg.UserID,
+		arg.ConversationName,
+		arg.AgentID,
+	)
+	var i CreateConversationWithInitialMessageRow
+	err := row.Scan(&i.ConversationID, &i.MessageID)
+	return i, err
+}
+
 const getAgent = `-- name: GetAgent :one
 select a.agent_id, a.name, a.agent_class_id, a.config
 from agents a

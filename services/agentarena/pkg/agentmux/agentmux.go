@@ -1,6 +1,7 @@
 package agentmux
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -81,16 +82,19 @@ func NewAiTutorMux(config *AgentArenaConfig) http.Handler {
 
 	fs := http.FileServer(http.Dir(filepath.Join("web", "static")))
 
-	mux.HandleFunc("GET /agents/{agentId}", buildRoute(h.setId("agentId"), h.authenticate, h.authorizeManageAgent, h.fetchAgentWithConfigAndSchema, renderTemplate[agentWithConfigAndSchema](templ, "agent.html")))
+	mux.HandleFunc("GET /agents/{agentId}", buildRoute(h.setIdByPathParam("agentId"), h.authenticate, h.authorizeAgentAbility(database.AgentAbilityTypeManage), h.fetchAgentWithConfigAndSchema, renderTemplate[agentWithConfigAndSchema](templ, "agent.html")))
 	mux.HandleFunc("GET /conversations", buildRoute(nil, h.authenticate, nil, h.fetchConversations, renderTemplate[[]database.GetUserConversationsRow](templ, "conversations.html")))
-	mux.HandleFunc("GET /conversations/{conversationId}", buildRoute(h.setId("conversationId"), h.authenticate, h.authorizeStartedConversation, h.fetchConversation, renderTemplate[database.GetConversationRow](templ, "conversation.html")))
+	mux.HandleFunc("GET /conversations/{conversationId}", buildRoute(h.setIdByPathParam("conversationId"), h.authenticate, h.authorizeStartedConversation, h.fetchConversation, renderTemplate[database.GetConversationRow](templ, "conversation.html")))
 	mux.Handle("GET /static/", http.StripPrefix("/static", fs))
 
-	mux.HandleFunc("GET /api/agents/{agentId}", buildRoute(h.setId("agentId"), h.authenticate, h.authorizeManageAgent, h.fetchAgent, renderJson))
-	mux.HandleFunc("PATCH /api/agents/{agentId}", buildRoute(h.setId("agentId"), h.authenticate, h.authorizeManageAgent, h.editAgent, respondWithCode[struct{}](http.StatusNoContent)))
+	mux.HandleFunc("GET /api/agents/{agentId}", buildRoute(h.setIdByPathParam("agentId"), h.authenticate, h.authorizeAgentAbility(database.AgentAbilityTypeManage), h.fetchAgent, renderJson))
+	mux.HandleFunc("PATCH /api/agents/{agentId}", buildRoute(h.setIdByPathParam("agentId"), h.authenticate, h.authorizeAgentAbility(database.AgentAbilityTypeManage), h.editAgent, respondWithCode[struct{}](http.StatusNoContent)))
+
 	mux.HandleFunc("GET /api/me/conversations", buildRoute(nil, h.authenticate, nil, h.fetchConversations, renderJson))
-	mux.HandleFunc("GET /api/conversations/{conversationId}/messages", buildRoute(h.setId("conversationId"), h.authenticate, h.authorizeStartedConversation, h.fetchConversationMessages, renderJson))
-	mux.HandleFunc("POST /api/conversations/{conversationId}/messages", buildRoute(h.setId("conversationId"), h.authenticate, h.authorizeStartedConversation, h.createMessage, renderJson))
+	mux.HandleFunc("POST /api/me/conversations", buildRoute(h.setAgentIdInJsonId, h.authenticate, h.authorizeAgentAbility(database.AgentAbilityTypeInteract), h.createConversation, renderJson))
+
+	mux.HandleFunc("GET /api/conversations/{conversationId}/messages", buildRoute(h.setIdByPathParam("conversationId"), h.authenticate, h.authorizeStartedConversation, h.fetchConversationMessages, renderJson))
+	mux.HandleFunc("POST /api/conversations/{conversationId}/messages", buildRoute(h.setIdByPathParam("conversationId"), h.authenticate, h.authorizeStartedConversation, h.createMessage, renderJson))
 
 	return mux
 }
@@ -102,6 +106,36 @@ func (ath *agentArenaHandler) fetchConversations(w http.ResponseWriter, r *http.
 		return nil, false
 	}
 	return conversations, true
+}
+
+type createConversationRequest struct {
+	MessageContent   string `json:"messageContent"`
+	ConversationName string `json:"conversationName"`
+	AgentID          int32  `json:"agentId"`
+}
+
+func (ath *agentArenaHandler) createConversation(w http.ResponseWriter, r *http.Request, profile UserProfile) (database.CreateConversationWithInitialMessageRow, bool) {
+	var resp database.CreateConversationWithInitialMessageRow
+	var req createConversationRequest
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		ath.badRequest(w, r, fmt.Sprintf("parsing JSON: %s", err.Error()))
+		return resp, false
+	}
+
+	createdData, err := ath.Db.CreateConversationWithInitialMessage(r.Context(), database.CreateConversationWithInitialMessageParams{
+		MessageContent:   req.MessageContent,
+		UserID:           profile.UserId,
+		ConversationName: req.ConversationName,
+		AgentID:          sql.NullInt32{Int32: req.AgentID, Valid: true},
+	})
+	if err != nil {
+		ath.badRequest(w, r, "could not create conversation with message")
+		log.Printf("creating conversation: %s", err.Error())
+		return resp, false
+	}
+	return createdData, true
+
 }
 
 func (ath *agentArenaHandler) fetchAgent(w http.ResponseWriter, r *http.Request, _ UserProfile) (database.GetAgentRow, bool) {
@@ -309,20 +343,26 @@ func (ath *agentArenaHandler) authenticate(w http.ResponseWriter, r *http.Reques
 	return profile, true
 }
 
-func (ath *agentArenaHandler) authorizeManageAgent(w http.ResponseWriter, r *http.Request, profile UserProfile) bool {
-	agentId := r.Context().Value(idKey).(idType)
-
-	if hasPermission, err := ath.Db.HasAgentPermission(r.Context(), database.HasAgentPermissionParams{
-		UserID:   profile.UserId,
-		GroupIds: profile.UserGroups,
-		AgentID:  int32(agentId),
-		Ability:  database.AgentAbilityTypeManage,
-	}); err != nil || !hasPermission {
+func (ath *agentArenaHandler) authorizeAgentAbility(ability database.AgentAbilityType) authzFunction[UserProfile] {
+	return func(w http.ResponseWriter, r *http.Request, profile UserProfile) bool {
+		agentId := r.Context().Value(idKey).(idType)
+		hasPermission, err := ath.Db.HasAgentPermission(r.Context(), database.HasAgentPermissionParams{
+			UserID:   profile.UserId,
+			GroupIds: profile.UserGroups,
+			AgentID:  int32(agentId),
+			Ability:  ability,
+		})
+		if err != nil {
+			ath.internalError(w, r, err)
+			return false
+		}
+		if hasPermission {
+			return true
+		}
 		ath.forbiddenError(w, r)
 		return false
 	}
 
-	return true
 }
 
 func (ath *agentArenaHandler) authorizeStartedConversation(w http.ResponseWriter, r *http.Request, profile UserProfile) bool {
@@ -339,7 +379,7 @@ func (ath *agentArenaHandler) authorizeStartedConversation(w http.ResponseWriter
 	return true
 }
 
-func (ath *agentArenaHandler) setId(pathParamName string) setContextFunction {
+func (ath *agentArenaHandler) setIdByPathParam(pathParamName string) setContextFunction {
 	return func(w http.ResponseWriter, r *http.Request) bool {
 		id, err := strconv.ParseInt(r.PathValue(pathParamName), 10, 64)
 		if err != nil {
@@ -350,6 +390,32 @@ func (ath *agentArenaHandler) setId(pathParamName string) setContextFunction {
 		return true
 	}
 
+}
+
+type agentIdJson struct {
+	AgentId int32 `json:"agentId"`
+}
+
+func (ath *agentArenaHandler) setAgentIdInJsonId(w http.ResponseWriter, r *http.Request) bool {
+
+	bodyBytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		ath.internalError(w, r, err)
+		return false
+	}
+	defer r.Body.Close()
+
+	var agentIdJson agentIdJson
+
+	if err := json.Unmarshal(bodyBytes, &agentIdJson); err != nil {
+		ath.badRequest(w, r, err.Error())
+		return false
+	}
+
+	(*r) = *r.WithContext(context.WithValue(r.Context(), idKey, idType(agentIdJson.AgentId)))
+	r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+
+	return true
 }
 
 func (ath *agentArenaHandler) unauthorizedError(w http.ResponseWriter, _ *http.Request) {
