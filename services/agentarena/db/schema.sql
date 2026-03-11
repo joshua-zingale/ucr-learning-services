@@ -34,7 +34,7 @@ create table group_agent_permissions (
 create table conversations (
     conversation_id serial primary key,
     user_id varchar(32) not null,
-    name varchar(32) not null,
+    name varchar(32) not null check (length(name) > 0),
     active_agent_id int references agents(agent_id)
 );
 
