@@ -47,7 +47,7 @@ func (q *Queries) UpdateAgentConfig(ctx context.Context, agent GetAgentRow, conf
 
 	schema, err := compiler.Compile("config.json")
 	if err != nil {
-		return fmt.Errorf("invalid JSON schema for agent class %d: %w", agent.AgentClassID, err)
+		return fmt.Errorf("invalid JSON schema for agent class %s: %w", agent.AgentClassID, err)
 	}
 
 	var requestJson any
