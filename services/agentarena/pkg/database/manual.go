@@ -36,27 +36,35 @@ func (q *Queries) GetConversation(ctx context.Context, conversationID int32) (Ge
 	return row, nil
 }
 
+func validateSchema(ctx context.Context, schema []byte, object any) error {
+	compiler := jsonschema.NewCompiler()
+	compiler.AddResource("config.json", bytes.NewReader(schema))
+
+	jsonSchema, err := compiler.Compile("config.json")
+	if err != nil {
+		return fmt.Errorf("invalid JSON schema: %w", err)
+	}
+
+	if err := jsonSchema.Validate(object); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // Validates that config matches the json schema of agent's class before updating,
 // returning an error if validation fails.
 func (q *Queries) UpdateAgentConfig(ctx context.Context, agent GetAgentRow, config []byte, configSchema []byte) error {
 
 	currentConfig := agent.Config.Bytes
 
-	compiler := jsonschema.NewCompiler()
-	compiler.AddResource("config.json", bytes.NewReader(configSchema))
-
-	schema, err := compiler.Compile("config.json")
-	if err != nil {
-		return fmt.Errorf("invalid JSON schema for agent class %s: %w", agent.AgentClassID, err)
-	}
-
 	var requestJson any
-	if err = json.Unmarshal(config, &requestJson); err != nil {
+	if err := json.Unmarshal(config, &requestJson); err != nil {
 		return fmt.Errorf("invalid JSON: %w", err)
 	}
 
-	if err := schema.Validate(requestJson); err != nil {
-		return err
+	if err := validateSchema(ctx, configSchema, requestJson); err != nil {
+		return fmt.Errorf("setting config for agent class %s: %w", agent.AgentClassID, err)
 	}
 
 	patchedConfig, err := jsonpatch.MergePatch(currentConfig, config)
