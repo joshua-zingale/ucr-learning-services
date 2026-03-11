@@ -6,6 +6,8 @@ insert into agents (agent_id, name, agent_class_id, config) values
 (2, 'dickbot', 'ollama', '{"systemPrompt": "You are Dick. Speak with the user like you are a good old pal who loves to play catch."}'),
 (3, 'harrybot', 'ollama', '{"systemPrompt": "Your father is the president of Osborn technology. Speak to the user like you know nothing of the green goblin, but drop hints."}');
 
+SELECT setval(pg_get_serial_sequence('"agents"', 'agent_id'), coalesce(max(agent_id), 0) + 1, false) from agents;
+
 insert into user_agent_permissions (user_id, agent_id, ability) values
 ('tom', 1, 'manage'),
 ('tom', 1, 'interact'),

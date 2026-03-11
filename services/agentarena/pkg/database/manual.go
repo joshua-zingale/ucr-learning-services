@@ -80,3 +80,27 @@ func (q *Queries) UpdateAgentConfig(ctx context.Context, agent GetAgentRow, conf
 		},
 	})
 }
+
+type CreateAgentWithManagerAndInteractor struct {
+	Name         string       `json:"name"`
+	AgentClassID string       `json:"agentClassId"`
+	Config       pgtype.JSONB `json:"config"`
+	UserID       string       `json:"userId"`
+}
+
+func (q *Queries) CreateAgentWithManagerAndInteractor(ctx context.Context, configSchema []byte, arg CreateAgentWithManagerAndInteractor) (int32, error) {
+
+	var requestJson any
+	if err := json.Unmarshal(arg.Config.Bytes, &requestJson); err != nil {
+		return 0, fmt.Errorf("invalid JSON: %w", err)
+	}
+	if err := validateSchema(ctx, configSchema, requestJson); err != nil {
+		return 0, err
+	}
+	return q.createAgentWithManagerAndInteractorUnchecked(ctx, createAgentWithManagerAndInteractorUncheckedParams{
+		Name:         arg.Name,
+		AgentClassID: arg.AgentClassID,
+		Config:       arg.Config,
+		UserID:       arg.UserID,
+	})
+}

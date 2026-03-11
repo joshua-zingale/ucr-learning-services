@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/jackc/pgtype"
 	"github.com/joshua-zingale/ucr-learning-services/services/agentarena/pkg/database"
 	"github.com/joshua-zingale/ucr-learning-services/services/agentarena/pkg/functools"
 	"github.com/joshua-zingale/ucr-learning-services/services/agentarena/pkg/templates"
@@ -90,6 +91,8 @@ func NewAiTutorMux(config *AgentArenaConfig) http.Handler {
 	mux.HandleFunc("GET /api/agents/{agentId}", buildRoute(h.setIdByPathParam("agentId"), h.authenticate, h.authorizeAgentAbility(database.AgentAbilityTypeManage), h.fetchAgent, renderJson))
 	mux.HandleFunc("PATCH /api/agents/{agentId}", buildRoute(h.setIdByPathParam("agentId"), h.authenticate, h.authorizeAgentAbility(database.AgentAbilityTypeManage), h.editAgent, respondWithCode[struct{}](http.StatusNoContent)))
 
+	mux.HandleFunc("POST /api/agents", buildRoute(nil, h.authenticate, h.authorizeGroup("agentarena.agentcreator"), h.createAgentWithManager, renderJson))
+
 	mux.HandleFunc("GET /api/me/conversations", buildRoute(nil, h.authenticate, nil, h.fetchConversations, renderJson))
 	mux.HandleFunc("POST /api/me/conversations", buildRoute(h.setAgentIdInJsonId, h.authenticate, h.authorizeAgentAbility(database.AgentAbilityTypeInteract), h.createConversation, renderJson))
 
@@ -149,6 +152,50 @@ func (ath *agentArenaHandler) fetchAgent(w http.ResponseWriter, r *http.Request,
 	}
 
 	return agent, true
+}
+
+type createAgentWithManagerRequest struct {
+	Name         string `json:"name"`
+	AgentClassID string `json:"agentClassId"`
+	Config       any    `json:"config"`
+}
+
+func (ath *agentArenaHandler) createAgentWithManager(w http.ResponseWriter, r *http.Request, profile UserProfile) (int32, bool) {
+	var req createAgentWithManagerRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		ath.badRequest(w, r, "invalid JSON data")
+		return 0, false
+	}
+
+	var config pgtype.JSONB
+	if err := config.Set(req.Config); err != nil {
+		ath.internalError(w, r, err)
+		return 0, false
+	}
+	driver, ok := ath.AgentClassDriverRegistry.GetFromId(req.AgentClassID)
+	if !ok {
+		ath.badRequest(w, r, fmt.Sprintf("invalid agent class '%s'", req.AgentClassID))
+		return 0, false
+	}
+
+	schema, err := driver.GetJsonSchemaRaw(r.Context())
+	if err != nil {
+		ath.internalError(w, r, err)
+		return 0, false
+	}
+
+	agentId, err := ath.Db.CreateAgentWithManagerAndInteractor(r.Context(), schema, database.CreateAgentWithManagerAndInteractor{
+		Name:         req.Name,
+		AgentClassID: req.AgentClassID,
+		Config:       config,
+		UserID:       profile.UserId,
+	})
+	if err != nil {
+		ath.internalError(w, r, err)
+		return 0, false
+	}
+
+	return agentId, true
 }
 
 type agentWithConfigAndSchema struct {
@@ -341,6 +388,20 @@ func (ath *agentArenaHandler) authenticate(w http.ResponseWriter, r *http.Reques
 	}
 
 	return profile, true
+}
+
+func (ath *agentArenaHandler) authorizeGroup(group string) authzFunction[UserProfile] {
+	return func(w http.ResponseWriter, r *http.Request, profile UserProfile) bool {
+
+		for _, userGroup := range profile.UserGroups {
+			if group == userGroup {
+				return true
+			}
+		}
+
+		ath.forbiddenError(w, r)
+		return false
+	}
 }
 
 func (ath *agentArenaHandler) authorizeAgentAbility(ability database.AgentAbilityType) authzFunction[UserProfile] {

@@ -290,6 +290,43 @@ func (q *Queries) StartedConversation(ctx context.Context, arg StartedConversati
 	return exists, err
 }
 
+const createAgentWithManagerAndInteractorUnchecked = `-- name: createAgentWithManagerAndInteractorUnchecked :one
+with new_agent as (
+    insert into agents (name, agent_class_id, config)
+    values ($1, $2, $3)
+    returning agent_id
+)
+insert into user_agent_permissions (user_id, agent_id, ability)
+select
+    $4 AS user_id, 
+    new_agent.agent_id AS agent_id, 
+    'manage'::agent_ability_type AS ability
+from new_agent
+union all
+select $4, new_agent.agent_id, 'interact'
+from new_agent
+returning agent_id
+`
+
+type createAgentWithManagerAndInteractorUncheckedParams struct {
+	Name         string       `json:"name"`
+	AgentClassID string       `json:"agentClassId"`
+	Config       pgtype.JSONB `json:"config"`
+	UserID       string       `json:"userId"`
+}
+
+func (q *Queries) createAgentWithManagerAndInteractorUnchecked(ctx context.Context, arg createAgentWithManagerAndInteractorUncheckedParams) (int32, error) {
+	row := q.db.QueryRow(ctx, createAgentWithManagerAndInteractorUnchecked,
+		arg.Name,
+		arg.AgentClassID,
+		arg.Config,
+		arg.UserID,
+	)
+	var agent_id int32
+	err := row.Scan(&agent_id)
+	return agent_id, err
+}
+
 const setAgentConfigUnchecked = `-- name: setAgentConfigUnchecked :exec
 update agents
 set config = $2

@@ -12,6 +12,22 @@ from agents a
 where a.agent_id=$1
 limit 1;
 
+-- name: createAgentWithManagerAndInteractorUnchecked :one
+with new_agent as (
+    insert into agents (name, agent_class_id, config)
+    values ($1, $2, $3)
+    returning agent_id
+)
+insert into user_agent_permissions (user_id, agent_id, ability)
+select
+    $4 AS user_id, 
+    new_agent.agent_id AS agent_id, 
+    'manage'::agent_ability_type AS ability
+from new_agent
+union all
+select $4, new_agent.agent_id, 'interact'
+from new_agent
+returning agent_id;
 
 -- name: setAgentConfigUnchecked :exec
 update agents
