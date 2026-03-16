@@ -23,6 +23,13 @@ Agent Arena supports a RESTful API at `/api/...`. Messages thus, for example,
 are posted to conversation 5 with a POST request to
 `/api/conversations/5/messages`.
 
+A RESTful API makes separation of the front- and back-end code easier, in that
+the front end can retrieve needed data lazily to render components.
+
+`/api/me/<path>` is used whenever the authenticated user's ID is used as an
+argument in the retrieved data, like `GET /api/me/conversations` for the
+authenticated user's conversations.
+
 ## Front End
 
 The front end presents a user-friendly interface to the RESTful API, serving
@@ -30,7 +37,9 @@ HTML, CSS, and JavaScript.
 
 ## Database
 
-Agent Arena uses Postgres as its database. [db/mocks/0001.sql](./db/mocks/0001.sql) may be run to populate the database with mock data to get it working.
+Agent Arena uses Postgres as its database.
+[db/mocks/0001.sql](./db/mocks/0001.sql) may be run to populate the database
+with mock data to get it working.
 
 ## Agents
 
@@ -58,7 +67,40 @@ need to be added to the `agent_classes` table and an AgentClassDriver that
 interacts with the Claude API would need to be written as Go code and added to
 the AgentClassDriverRegistry.
 
+## Web Routes
 
+An internal API, `qapi`, is used to organize routes for the web server. The idea
+is to split the work of a web route into different stages, allowing reuse of any
+one stage across multiple routes.
+
+For example, the routes for getting all of a user's conversations as an HTML
+page vs. JSON are (at the time of writing) defined with
+
+```go
+// HTML
+mux.HandleFunc("GET /conversations", qapi.QApi(qapi.QApiParams[UserProfile, struct{}, []database.GetUserConversationsRow]{
+		Auth:        h.authenticate,
+		Read:        nil,
+		Authz:       nil,
+		Act:         h.fetchUserConversations,
+		Render:      renderTemplate[[]database.GetUserConversationsRow](templ, "conversations.html"),
+		RenderError: renderErrorAsHtml,
+	}))
+
+// JSON
+mux.HandleFunc("GET /api/me/conversations", qapi.QApi(qapi.QApiParams[UserProfile, struct{}, []database.GetUserConversationsRow]{
+		Auth:        h.authenticate,
+		Read:        nil,
+		Authz:       nil,
+		Act:         h.fetchUserConversations,
+		Render:      renderJson[[]database.GetUserConversationsRow],
+		RenderError: renderErrorAsJson,
+	}))
+```
+
+The routes thus differ only in the method of rendering that is used, with the
+authentication and data fetching routines reused. This paradigm makes heavy use
+of generics to promote type safety.
 
 # sqlc
 
@@ -84,8 +126,7 @@ Permissions management is rudimentary but provides a solid foundation.
 Ollama is the only LLM provided for which support has been added, and only
 minimally. The only configuration item is the system prompt.
 
-The RESTful API lacks many needed endpoints, such as the creation and deletions
-of agents and conversations and the granting and revocation of permissions
+The RESTful API lacks many needed endpoints.
 
 The front end is un-styled and poorly organized with JavaScript shipped in the
 same file as the HTML.
@@ -97,4 +138,5 @@ insert into agent_classes(agent_class_id, name) values
 ('ollama', 'Ollama');
 ```
 
-must be run on the database before the web server will function because the code currently assumes the existence of `ollama` as an agent class in the database.
+must be run on the database before the web server will function because the code
+currently assumes the existence of `ollama` as an agent class in the database.
