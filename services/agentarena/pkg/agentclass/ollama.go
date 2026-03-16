@@ -109,5 +109,6 @@ func (oad *OllamaAgentDriver) GetJsonSchemaRaw(ctx context.Context) ([]byte, err
 		"$schema": "https://json-schema.org/draft/2020-12/schema",
 		"type": "object",
 		"properties": {"systemPrompt": {"type": "string"}},
-		"additionalProperties": false}`), nil
+		"additionalProperties": false,
+		"required": ["systemPrompt"]}`), nil
 }
