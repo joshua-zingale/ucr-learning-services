@@ -76,6 +76,8 @@ Agent Arena's architecture reflects the desire for customizability.
 At its core, Agent Arena manages _conversations_, which store _messages_, some
 of which are from _users_ and others from AI _agents_.
 
+Authentication is and should not be handled by this web server, which instead relies on incoming headers, set ideally by a reverse proxy, to determine the authenticated user and his permissions.
+
 ## REST
 
 Agent Arena supports a RESTful API at `/api/...`. Messages thus, for example,
