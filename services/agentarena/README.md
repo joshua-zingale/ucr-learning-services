@@ -128,6 +128,15 @@ need to be added to the `agent_classes` table and an AgentClassDriver that
 interacts with the Claude API would need to be written as Go code and added to
 the AgentClassDriverRegistry.
 
+### Agent Config Schema Validation
+
+Since each agent class has a unique config specified by a JSON schema,
+database integrity relies on an agent's config aligning with the JSON schema for its class.
+To ensure this integrity, a new config must be validated, in Go code, against the schema before any update is applied to the database.
+
+As of the time of writing, JSON schema validation is done using [github.com/santhosh-tekuri/jsonschema/v5](github.com/santhosh-tekuri/jsonschema/v5).
+
+
 ## Web Routes
 
 An internal API, `qapi`, is used to organize routes for the web server. The idea
