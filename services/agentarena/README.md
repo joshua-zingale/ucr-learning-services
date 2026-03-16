@@ -10,6 +10,65 @@ has a different idea of how an "AI Tutor" should function for students. Thus, we
 sought to develop a platform that would facilitate the hosting of chatbot agents
 that can be greatly customized.
 
+# Running
+
+To run Agent Arena, you must have a reverse proxy that manages authentication
+headers, a database, and Ollama all running.
+
+The web server may be started with
+[cmd/agentarena/main.go](./cmd/agentarena/main.go). Its parameters may be set
+using the command line, with a config file, or environment variables or a
+mixture of the three.
+
+## Dependent services
+
+### Authentication/Groups Proxy
+
+The web server expects to receive HTTP requests with an X-Email header giving
+the UID and an X-Groups header containing the groups of which the authenticated
+user is a member. These headers are fully trusted, so they must be set by a
+trusted authority. For example, a user should not be able to connect directly to
+the web server lest he set his UID to whatever he please. Instead, users should
+only have access to the web server through a proxy that handles the X-Email and
+X-Groups headers.
+
+To test this locally without setting up a complex reverse proxy as with NGINX,
+you can use
+[Caddy's reverse proxy](https://caddyserver.com/docs/quick-starts/reverse-proxy).
+Assuming you are running this web server on `localhost:46307`, you can run
+
+```bash
+caddy reverse-proxy --from :8080 --to :46307 \
+	--header-up "X-Email: tom" \
+	--header-up "X-Groups: agentarena.agentcreator,cs100.instructor"
+```
+
+to create a simple reverse proxy that sets the authentication headers. Then,
+sending requests to `localhost:8080` will route requests to the web server with
+the headers inserted.
+
+### Postgres
+
+The web server requires that a Postgres database be running. Moreover, as of the
+time of writing, the web server requires that something like
+
+```sql
+insert into agent_classes(agent_class_id, name) values
+('ollama', 'Ollama');
+```
+
+be run in the database because the Ollama agent class is assumed to exist.
+
+There is a bash script, [reload-db.bash](./reload-db.bash), which drops a
+database (named _agentarena_ by default), creates a new one with the same name,
+then loads it with mock data from [db/mocks/0001.sql](./db/mocks/0001.sql). This
+is useful for testing.
+
+### Ollama
+
+Ollama, as of the time of writing, must be running with `gemma3:1B` installed
+for the web server to function.
+
 # Architecture
 
 Agent Arena's architecture reflects the desire for customizability.
